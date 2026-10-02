@@ -559,7 +559,7 @@ function queueComponents(queue) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
       )
     ];
   }
