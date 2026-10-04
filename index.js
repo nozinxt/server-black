@@ -131,7 +131,7 @@ function createDefaultDatabase() {
       ticketRefundChannelId: null,
       ticketVacanciesChannelId: null,
       ticketEventChannelId: null,
-      ticketPanelTitle: "🎫 CENTRAL DE TICKETS",
+      ticketPanelTitle: "🎫 CENTRAL DE ATENDIMENTO",
       ticketPanelDescription: null,
       ticketPanelBanner: null,
       ticketPanelThumbnail: null,
@@ -358,13 +358,13 @@ function userStats(userId) {
 function configEmbed() {
   const c = db.config;
 
-  return makeEmbed("⚙️ CONFIGURAÇÃO DO BOT", [
-    "**Central de configuração**",
-    "Use o menu abaixo para escolher uma área. Cada opção explica exatamente o que será configurado.",
+  return makeEmbed("⚙️ CONFIGURAÇÕES DO BOT", [
+    "**Painel de configurações**",
+    "Escolha abaixo o que você quer configurar. Cada opção mostra o que pode ser alterado.",
     "",
     "👥 **Equipe e permissões**",
-    `Mediador: ${c.mediatorRoleId ? `<@&${c.mediatorRoleId}>` : "❌ Não configurado"} • Analista: ${c.analystRoleId ? `<@&${c.analystRoleId}>` : "❌ Não configurado"}`,
-    `Streamer: ${c.streamerRoleId ? `<@&${c.streamerRoleId}>` : "❌ Não configurado"} • Administradores: **${c.admins.length}/20**`,
+    `Mediador: ${c.mediatorRoleId ? `<@&${c.mediatorRoleId}>` : "❌ Ainda não configurado"} • Analista: ${c.analystRoleId ? `<@&${c.analystRoleId}>` : "❌ Ainda não configurado"}`,
+    `Streamer: ${c.streamerRoleId ? `<@&${c.streamerRoleId}>` : "❌ Ainda não configurado"} • Administradores: **${c.admins.length}/20**`,
     "",
     "🎫 **Tickets**",
     `Suporte: ${c.supportRoleId ? `<@&${c.supportRoleId}>` : "❌"} • Supervisor: ${c.supervisorRoleId ? `<@&${c.supervisorRoleId}>` : "❌"} • Auxiliar: ${c.auxiliaryRoleId ? `<@&${c.auxiliaryRoleId}>` : "❌"}`,
@@ -378,9 +378,9 @@ function configEmbed() {
     "",
     "🎨 **Aparência**",
     `Cor: \`${c.embedColor}\` • Foto padrão: ${c.profileImage ? "✅ Configurada" : "❌ Não configurada"}`,
-    `Painel de tickets: **${c.ticketPanelTitle || "🎫 CENTRAL DE TICKETS"}**`,
+    `Painel de tickets: **${c.ticketPanelTitle || "🎫 CENTRAL DE ATENDIMENTO"}**`,
     "",
-    "👇 **Escolha uma opção no menu para configurar o sistema.**"
+    "👇 **Escolha uma opção abaixo para continuar.**"
   ].join("\n"));
 }
 
@@ -435,7 +435,7 @@ async function requireSupport(interaction) {
   if (!supportCheck(interaction)) {
     await deny(
       interaction,
-      "❌ Apenas os cargos responsáveis pelos tickets podem usar esta função."
+      "❌ Apenas a equipe responsável pelos atendimentos pode fazer isso."
     );
     return false;
   }
@@ -451,7 +451,7 @@ async function deny(interaction, text) {
 
 async function requireAdmin(interaction) {
   if (!adminCheck(interaction)) {
-    await deny(interaction, "❌ Você precisa ser ADM para usar esta função.");
+    await deny(interaction, "❌ Você precisa ser ADM para fazer isso.");
     return false;
   }
   return true;
@@ -459,7 +459,7 @@ async function requireAdmin(interaction) {
 
 async function requireMediator(interaction) {
   if (!mediatorCheck(interaction)) {
-    await deny(interaction, "❌ Apenas Mediadores podem usar esta função.");
+    await deny(interaction, "❌ Apenas Mediadores podem fazer isso.");
     return false;
   }
   return true;
@@ -467,7 +467,7 @@ async function requireMediator(interaction) {
 
 async function requireAnalyst(interaction) {
   if (!analystCheck(interaction)) {
-    await deny(interaction, "❌ Apenas Analistas podem usar esta função.");
+    await deny(interaction, "❌ Apenas Analistas podem fazer isso.");
     return false;
   }
   return true;
@@ -475,7 +475,7 @@ async function requireAnalyst(interaction) {
 
 async function requireStreamer(interaction) {
   if (!streamerCheck(interaction)) {
-    await deny(interaction, "❌ Apenas Influencers/Streamers com o cargo configurado podem usar esta função.");
+    await deny(interaction, "❌ Apenas o cargo de Influencer/Streamer configurado pode fazer isso.");
     return false;
   }
   return true;
@@ -514,7 +514,7 @@ async function playerSelectOptions(guild, players, emoji) {
     return {
       label: name || `ID ${id}`,
       value: id,
-      description: "Selecionar este jogador",
+      description: "Escolher este jogador",
       emoji
     };
   }));
@@ -526,7 +526,7 @@ function queueTitle(queue) {
 
 function queueDescription(queue) {
   const players = queue.players.length === 0
-    ? "Nenhum jogador na fila."
+    ? "A fila está vazia."
     : queue.players.map((id, index) => {
         const mode = queue.playerModes?.[id];
         const modeText = mode === "gelo_normal" ? " — Gelo Normal"
@@ -540,7 +540,7 @@ function queueDescription(queue) {
       }).join("\n");
 
   return [
-    "**Jogadores**",
+    "**Jogadores na fila**",
     players
   ].join("\n");
 }
@@ -568,7 +568,7 @@ function queueComponents(queue) {
     return [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -578,7 +578,7 @@ function queueComponents(queue) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -588,7 +588,7 @@ function queueComponents(queue) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("full ump e xm8").setEmoji({ id: "1555678680447975565" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -606,12 +606,12 @@ function queueOneVsOneModeComponents(format, modality, value, channelId) {
 }
 
 async function mediatorQueueEmbed(guild) {
-  const lines = ["**FILA MEDIADORES**", ""];
+  const lines = ["**FILA DE MEDIADORES**", ""];
 
   if (!db.mediatorQueue?.length) {
     lines.push("👤 **Nenhum Mediador na fila.**");
   } else {
-    lines.push("👨‍⚖️ **Mediadores aguardando:**");
+    lines.push("👨‍⚖️ **Mediadores na fila:**");
     const mediatorMembers = await Promise.all(
       db.mediatorQueue.map(userId =>
         guild.members.fetch(userId).catch(() => null)
@@ -742,29 +742,29 @@ async function renameBetThreadAfterConfirmation(guild, bet) {
 function betEmbed(bet) {
   const confirmed = new Set(bet.confirmedBy || []);
   const confirmationLines = bet.players.map((id, index) => {
-    const status = confirmed.has(id) ? "✅ Confirmado" : "⏳ Aguardando";
+    const status = confirmed.has(id) ? "✅ Confirmado" : "⏳ Esperando";
     return `**${index + 1}.** <@${id}> — ${status}`;
   }).join("\n");
 
-  return makeEmbed("🎮 CONFIRMAÇÃO DA APOSTA", [
+  return makeEmbed("🎮 CONFIRME A APOSTA", [
     `🎮 **Formato:** ${bet.format}`,
     `📱 **Modalidade:** ${modalityName(bet.modality)}`,
     `💰 **Valor:** ${money(bet.value)}`,
     `🏆 **Prêmio:** ${money(Number(bet.value) * 2)}`,
     "",
-    "👥 **Jogadores**",
+    "👥 **Jogadores na fila**",
     confirmationLines,
     "",
-    "📌 **Como funciona**",
-    "1️⃣ Confira o formato, modalidade e valor.",
-    "2️⃣ Cada jogador deve clicar em **Confirmar**.",
-    "3️⃣ O painel permanece no chat durante as confirmações.",
-    "4️⃣ Depois que os 2 confirmarem, os dados Pix serão enviados automaticamente.",
-    "5️⃣ O Mediador receberá acesso somente após as duas confirmações.",
+    "📌 **Como vai funcionar**",
+    "1️⃣ Confira o formato, a modalidade e o valor.",
+    "2️⃣ Os dois jogadores precisam clicar em **Confirmar**.",
+    "3️⃣ O painel ficará no chat enquanto vocês confirmam.",
+    "4️⃣ Assim que os dois confirmarem, os dados para pagamento serão enviados automaticamente.",
+    "5️⃣ O Mediador só terá acesso depois que os dois confirmarem.",
     "",
     bet.confirmedBy.length === bet.players.length
-      ? "🟢 **Aposta confirmada pelos 2 jogadores.**"
-      : `⏳ **Aguardando:** ${bet.players.length - bet.confirmedBy.length} confirmação(ões).`
+      ? "🟢 **Os dois jogadores confirmaram a aposta.**"
+      : `⏳ **Esperando:** ${bet.players.length - bet.confirmedBy.length} confirmação(ões).`
   ].join("\n"));
 }
 
@@ -780,12 +780,12 @@ function betButtons(betId) {
 function mediatorPanelComponents(betId) {
   return [
     new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder().setCustomId(`med_panel|${betId}`).setPlaceholder("Selecione uma ação")
+      new StringSelectMenuBuilder().setCustomId(`med_panel|${betId}`).setPlaceholder("Escolha uma ação")
         .addOptions([
-          { label: "Escolher vencedor", value: "winner", emoji: "🏆" },
+          { label: "Escolher quem venceu", value: "winner", emoji: "🏆" },
           { label: "Vitória por W.O.", value: "wo", emoji: "🚫" },
-          { label: "Identificar sala", value: "identify", emoji: "🔎" },
-          { label: "Finalizar aposta", value: "finish", emoji: "🏁" }
+          { label: "Ver dados da sala", value: "identify", emoji: "🔎" },
+          { label: "Encerrar aposta", value: "finish", emoji: "🏁" }
         ])
     )
   ];
@@ -817,23 +817,23 @@ function paymentMessage(bet) {
   if (!pix) {
     return {
       embeds: [
-        makeEmbed("💳 PAGAMENTO DA APOSTA", [
+        makeEmbed("💳 PAGAMENTO", [
           `💰 **Valor:** ${money(amountToPay)}`,
           "",
-          "⚠️ **PIX DO ADM NÃO CONFIGURADO.**",
-          "Um ADM deve cadastrar o Pix pelo `/painel cadastro`."
+          "⚠️ **O PIX ainda ainda não foi configurado.**",
+          "Um ADM precisa cadastrar o Pix em `/painel cadastro` antes de continuar."
         ].join("\n"))
       ]
     };
   }
 
-  const embed = makeEmbed("💳 PAGAMENTO DA APOSTA", [
+  const embed = makeEmbed("💳 PAGAMENTO", [
     `💰 **Valor:** ${money(amountToPay)}`,
     "",
-    `👤 **Titular:** ${pix.name}`,
+    `👤 **Recebedor:** ${pix.name}`,
     `🔑 **Chave PIX:** \`${pix.key}\``,
     "",
-    "📌 **Faça o pagamento e aguarde a orientação do Mediador.**"
+    "📌 **Faça o pagamento e aguarde as instruções do Mediador.**"
   ].join("\n"));
 
   if (pix.qr && validUrl(pix.qr)) {
@@ -851,7 +851,7 @@ async function createPrivateBetChannel(guild, bet) {
     : null;
 
   if (!parent || parent.type !== ChannelType.GuildText) {
-    throw new Error("O Canal das Apostas ainda não foi configurado no /config.");
+    throw new Error("O Canal das Apostas ainda ainda não foi configurado no /config.");
   }
 
   // As filas ficam como mensagens normais dentro do Canal das Apostas.
@@ -979,11 +979,11 @@ function streamerQueueEmbed(queue, guild) {
   const streamerMention = `<@${queue.streamerId}>`;
   const waiting = queue.players?.length
     ? queue.players.map((id, index) => `**${index + 1}.** <@${id}>`).join("\n")
-    : "_Ninguém aguardando._";
+    : "_Ninguém na fila no momento._";
 
   const active = queue.activeMatchId && db.streamerMatches?.[queue.activeMatchId]
     ? "🟢 **Em atendimento:** 1 jogador"
-    : "🟢 **Disponível:** aguardando jogador";
+    : "🟢 **Disponível:** esperando alguém entrar";
 
   return makeEmbed(`🎥 FILA DO ${guild?.members?.cache?.get(queue.streamerId)?.displayName || "INFLUENCER"}`, [
     `👑 **Influencer:** ${streamerMention}`,
@@ -993,7 +993,7 @@ function streamerQueueEmbed(queue, guild) {
     `📜 **Regras / descrição:**\n${queue.description || "_Nenhuma regra informada._"}`,
     "",
     active,
-    `👥 **Aguardando:** ${queue.players?.length || 0}`,
+    `👥 **Esperando:** ${queue.players?.length || 0}`,
     waiting
   ].join("\n"));
 }
@@ -1003,12 +1003,12 @@ function streamerQueueComponents(queue) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`streamer_join|${queue.id}`)
-        .setLabel("Entrar na fila")
+        .setLabel("Entrar")
         .setEmoji("🎮")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`streamer_leave|${queue.id}`)
-        .setLabel("Sair da fila")
+        .setLabel("Sair")
         .setEmoji("🚪")
         .setStyle(ButtonStyle.Danger)
     )
@@ -1119,7 +1119,7 @@ async function startNextStreamerMatch(queue, guild) {
         "",
         `📜 **Regras:**\n${queue.description || "_Nenhuma regra informada._"}`,
         "",
-        "👑 O Influencer é o responsável por gerenciar esta aposta.",
+        "👑 O Influencer é o pessoa da equipe por gerenciar esta aposta.",
         "🏁 Para finalizar, o Influencer deve usar **`.f`** neste canal."
       ].join("\n"))
     ]
@@ -1178,12 +1178,12 @@ function ticketCreationPanelComponents() {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("ticket_create_menu")
-        .setPlaceholder("🎫 Selecione o tipo de atendimento")
+        .setPlaceholder("🎫 Escolha o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", emoji: "🛠️", description: "Atendimento geral e suporte." },
-          { label: "Reembolso", value: "refund", emoji: "💰", description: "Solicitações relacionadas a reembolso." },
-          { label: "Vagas", value: "vacancies", emoji: "📋", description: "Dúvidas e solicitações sobre vagas." },
-          { label: "Receber Evento", value: "event", emoji: "🎉", description: "Atendimento para recebimento de eventos." }
+          { label: "Suporte", value: "support", emoji: "🛠️", description: "Ajuda geral e suporte." },
+          { label: "Reembolso", value: "refund", emoji: "💰", description: "Ajuda com reembolsos." },
+          { label: "Vagas", value: "vacancies", emoji: "📋", description: "Dúvidas e pedidos sobre vagas." },
+          { label: "Receber Evento", value: "event", emoji: "🎉", description: "Ajuda para receber eventos." }
         ])
     )
   ];
@@ -1193,18 +1193,18 @@ function ticketCreationPanelEmbed() {
   const c = db.config;
   const embed = new EmbedBuilder()
     .setColor(c.ticketPanelColor || c.embedColor || "#5865F2")
-    .setTitle(c.ticketPanelTitle || "🎫 CENTRAL DE TICKETS")
+    .setTitle(c.ticketPanelTitle || "🎫 CENTRAL DE ATENDIMENTO")
     .setDescription((c.ticketPanelDescription || [
-      "**Central oficial de atendimento.**",
+      "**Central de atendimento.**",
       "",
-      "Selecione no menu abaixo o tipo de atendimento que você precisa.",
+      "Escolha abaixo o tipo de atendimento que você precisa.",
       "",
       "🛠️ **Suporte** — Atendimento geral.",
-      "💰 **Reembolso** — Solicitações relacionadas a reembolso.",
-      "📋 **Vagas** — Dúvidas e solicitações sobre vagas.",
-      "🎉 **Receber Evento** — Atendimento para recebimento de eventos.",
+      "💰 **Reembolso** — Ajuda com reembolsos.",
+      "📋 **Vagas** — Dúvidas e pedidos sobre vagas.",
+      "🎉 **Receber Evento** — Ajuda para receber eventos.",
       "",
-      "🔒 O atendimento é privado e somente você e a equipe responsável terão acesso."
+      "🔒 Este atendimento é privado. Só você e a equipe pessoa da equipe terão acesso."
     ].join("\n")).trim())
     .setFooter({ text: c.ticketPanelFooter || "🎮 Sistema de Apostas" });
 
@@ -1222,17 +1222,17 @@ function ticketPanelComponents(ticketId, claimedBy = null) {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`aux_panel|${ticketId}`)
-        .setPlaceholder("Painel do Ticket")
+        .setPlaceholder("Opções do atendimento")
         .addOptions([
           {
-            label: claimedBy ? "Ticket já assumido" : "Assumir Ticket",
+            label: claimedBy ? "Atendimento já assumido" : "Assumir atendimento",
             value: "claim",
             emoji: claimedBy ? "✅" : "👤",
-            description: claimedBy ? "Este ticket já possui um responsável." : "Assuma este ticket como responsável."
+            description: claimedBy ? "Este ticket já possui um pessoa da equipe." : "Assuma este ticket como pessoa da equipe."
           },
-          { label: "Finalizar ticket", value: "finish", emoji: "🏁", description: "Finaliza este atendimento." },
-          { label: "Adicionar membro", value: "add", emoji: "➕", description: "Adiciona um membro ao ticket." },
-          { label: "Mudar nome do canal", value: "rename", emoji: "✏️", description: "Altera o nome deste ticket." }
+          { label: "Encerrar atendimento", value: "finish", emoji: "🏁", description: "Encerra este atendimento." },
+          { label: "Adicionar pessoa", value: "add", emoji: "➕", description: "Adiciona outra pessoa a este atendimento." },
+          { label: "Renomear atendimento", value: "rename", emoji: "✏️", description: "Altera o nome deste atendimento." }
         ])
     )
   ];
@@ -1241,7 +1241,7 @@ function ticketPanelComponents(ticketId, claimedBy = null) {
 function ticketPanelEmbed(ticket, guild) {
   const type = TICKET_TYPES[ticket.type] || TICKET_TYPES.support;
   return makeEmbed(`${type.emoji} TICKET DE ${type.label.toUpperCase()}`, [
-    "**Central de atendimento deste ticket.**",
+    "**Informações deste atendimento.**",
     "",
     `👤 **Criado por:** <@${ticket.creatorId}>`,
     `🎫 **Ticket:** <#${ticket.channelId}>`,
@@ -1249,7 +1249,7 @@ function ticketPanelEmbed(ticket, guild) {
     `🟢 **Status:** ${ticket.status === "open" ? "Em atendimento" : "Finalizado"}`,
     "",
     "🛠️ **Ações disponíveis**",
-    "O responsável pode usar `.aux` para abrir o painel de gerenciamento neste ticket."
+    "A pessoa da equipe pode usar `.aux` para abrir o painel de gerenciamento neste ticket."
   ].join("\n"));
 }
 
@@ -1312,7 +1312,7 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
     ) {
       removePromises.push(
         ticketChannel.members
-          .remove(member.id, "Ticket assumido por outro responsável")
+          .remove(member.id, "Ticket assumido por outro pessoa da equipe")
           .catch(error => {
             console.error(`❌ Não foi possível remover ${member.id} da thread:`, error);
           })
@@ -1362,7 +1362,7 @@ async function createTicketChannel(interaction, ticketType = "support") {
     : null;
 
   if (!configuredChannel || configuredChannel.type !== ChannelType.GuildText) {
-    throw new Error(`O canal de tickets de ${type.label} ainda não foi configurado no /config.`);
+    throw new Error(`O canal de atendimento de ${type.label} ainda ainda não foi configurado no /config.`);
   }
 
   // Cada ticket é uma THREAD PRIVADA criada diretamente debaixo do canal
@@ -1429,14 +1429,14 @@ async function createTicketChannel(interaction, ticketType = "support") {
       responsibleRoleMentions.join(" ")
     ].filter(Boolean).join(" "),
     embeds: [makeEmbed(`${type.emoji} TICKET DE ${type.label.toUpperCase()}`, [
-      "**Atendimento privado criado.**",
+      "**Seu atendimento foi criado.**",
       "",
       `📌 **Tipo:** ${type.label}`,
       "👥 Os cargos responsáveis foram marcados acima.",
-      "💬 Explique sua solicitação neste ticket.",
-      "⚠️ Não envie mensagens privadas para a equipe.",
+      "💬 Conte para a equipe o que você precisa.",
+      "⚠️ Para agilizar, fale com a equipe por aqui mesmo.",
       "",
-      "👤 Um responsável pode assumir o ticket pelo painel abaixo.",
+      "👤 Alguém da equipe pode assumir seu atendimento pelo painel abaixo.",
       "🛠️ `.aux` abre o painel de gerenciamento."
     ].join("\n"))],
     components: ticketPanelComponents(ticket.id)
@@ -1523,13 +1523,13 @@ function configTicketRoleChooserComponents() {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("config_ticket_role_choice")
-        .setPlaceholder("🎫 Escolha qual cargo deseja configurar")
+        .setPlaceholder("🎫 Escolha o cargo que você quer configurar")
         .addOptions([
-          { label: "Suporte", value: "support", emoji: "🛠️", description: "Cargo responsável pelo Suporte." },
-          { label: "Supervisor", value: "supervisor", emoji: "👔", description: "Cargo responsável pela Supervisão." },
-          { label: "Auxiliar", value: "auxiliary", emoji: "🔧", description: "Cargo responsável pelo atendimento Auxiliar." },
-          { label: "Diretor", value: "director", emoji: "🧭", description: "Cargo responsável pela Direção." },
-          { label: "Sub Don", value: "subdon", emoji: "👑", description: "Cargo responsável pelo Sub Don." }
+          { label: "Suporte", value: "support", emoji: "🛠️", description: "Cargo pessoa da equipe pelo Suporte." },
+          { label: "Supervisor", value: "supervisor", emoji: "👔", description: "Cargo pessoa da equipe pela Supervisão." },
+          { label: "Auxiliar", value: "auxiliary", emoji: "🔧", description: "Cargo pessoa da equipe pelo atendimento Auxiliar." },
+          { label: "Diretor", value: "director", emoji: "🧭", description: "Cargo pessoa da equipe pela Direção." },
+          { label: "Sub Don", value: "subdon", emoji: "👑", description: "Cargo pessoa da equipe pelo Sub Don." }
         ])
     ),
     configBackRow()
@@ -1696,7 +1696,7 @@ async function processAnalysis(message, type) {
   if (!message.guild || !message.channel?.isTextBased()) return;
 
   if (!db.config.analystRoleId) {
-    await message.reply("❌ O cargo de Analista ainda não foi configurado no `/config`.").catch(() => {});
+    await message.reply("❌ O cargo de Analista ainda ainda não foi configurado no `/config`.").catch(() => {});
     return;
   }
 
@@ -1741,7 +1741,7 @@ async function processAnalysis(message, type) {
         `📱 **Modalidade:** ${type}`,
         `👤 **Solicitante:** <@${message.author.id}>`,
         "",
-        "⏳ **Status:** Aguardando Analista"
+        "⏳ **Status:** Esperando Analista"
       ].join("\n"))
     ],
     components: [
@@ -1853,7 +1853,7 @@ client.on("messageCreate", async message => {
       }
 
       if (match.streamerId !== message.author.id || !streamerCheck({ member: message.member })) {
-        return message.reply("❌ Apenas o Influencer responsável por esta aposta pode usar `.f`.");
+        return message.reply("❌ Apenas o Influencer pessoa da equipe por esta aposta pode usar `.f`.");
       }
 
       await finishStreamerMatch(message, match);
@@ -1877,7 +1877,7 @@ client.on("messageCreate", async message => {
       // `.aux` deve abrir o painel DENTRO DO PRÓPRIO TICKET.
       // O comando é apagado para não poluir o atendimento.
       // Ações do painel continuam bloqueadas para qualquer pessoa que não
-      // seja responsável pelo ticket.
+      // seja pessoa da equipe pelo ticket.
       await message.delete().catch(() => {});
 
       // Remove painéis .aux anteriores enviados pelo bot neste ticket para
@@ -1886,7 +1886,7 @@ client.on("messageCreate", async message => {
       if (recent) {
         const oldPanels = recent.filter(m =>
           m.author?.id === client.user.id &&
-          m.embeds?.[0]?.title === "🛠️ PAINEL DO RESPONSÁVEL"
+          m.embeds?.[0]?.title === "🛠️ PAINEL DA EQUIPE"
         );
         if (oldPanels.size) {
           await message.channel.bulkDelete(oldPanels, true).catch(async () => {
@@ -1896,11 +1896,11 @@ client.on("messageCreate", async message => {
       }
 
       await message.channel.send({
-        embeds: [makeEmbed("🛠️ PAINEL DO RESPONSÁVEL", [
+        embeds: [makeEmbed("🛠️ PAINEL DA EQUIPE", [
           `🎫 **Ticket:** <#${ticket.channelId}>`,
-          `👤 **Responsável:** <@${message.author.id}>`,
+          `👤 **Atendendo:** <@${message.author.id}>`,
           "",
-          "Use o menu abaixo para gerenciar este atendimento.",
+          "Use as opções abaixo para cuidar deste atendimento.",
           "🔒 Somente cargos responsáveis podem executar as ações."
         ].join("\n"))],
         components: ticketPanelComponents(ticket.id, ticket.claimedBy)
@@ -1930,7 +1930,7 @@ client.on("messageCreate", async message => {
       }
 
       if (bet.mediatorId && bet.mediatorId !== message.author.id) {
-        return message.reply("❌ Você não é o Mediador responsável por esta aposta.");
+        return message.reply("❌ Você não é o Mediador pessoa da equipe por esta aposta.");
       }
 
       if (bet.confirmedBy.length < bet.players.length) {
@@ -1946,7 +1946,7 @@ client.on("messageCreate", async message => {
               "",
               `🎮 **Formato:** ${bet.format} • ${modalityName(bet.modality)}`,
               `💰 **Valor:** ${money(bet.value)} • 🏆 **Prêmio:** ${money(bet.value * 2)}`,
-              `👥 **Jogadores:** ${bet.players.map(id => `<@${id}>`).join(" • ")}`,
+              `👥 **Jogadores na fila:** ${bet.players.map(id => `<@${id}>`).join(" • ")}`,
               "",
               "🛠️ **Ações disponíveis**",
               "Use o menu abaixo para escolher o vencedor, registrar W.O., identificar a sala ou finalizar a aposta."
@@ -1990,28 +1990,28 @@ function pixPanelPayload() {
   const lines = [
     "**CADASTRO DE PIX**",
     "",
-    "Cada usuário pode cadastrar seu próprio Pix.",
+    "Cada pessoa pode cadastrar o próprio Pix.",
     "O nome cadastrado aparece automaticamente neste painel.",
     "",
     "👥 **Nomes cadastrados:**"
   ];
 
   if (!entries.length) {
-    lines.push("❌ Nenhum Pix cadastrado.");
+    lines.push("❌ Ainda não há nenhum Pix cadastrado.");
   } else {
     for (const [userId, pix] of entries) {
       const editedLabel = pix?.edited ? " — **Editado**" : "";
-      lines.push(`• **${pix.name || "Sem nome"}**${editedLabel} — <@${userId}>`);
+      lines.push(`• **${pix.name || "Nome não informado"}**${editedLabel} — <@${userId}>`);
     }
   }
 
   return {
-    embeds: [makeEmbed("💳 PAINEL DE CADASTRO PIX", lines.join("\n"))],
+    embeds: [makeEmbed("💳 PAINEL DE CADASTRO DO PIX", lines.join("\n"))],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("pix_configure").setLabel("Configurar Pix").setEmoji("⚙️").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("pix_edit").setLabel("Editar Pix").setEmoji("✏️").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("pix_remove").setLabel("Remover Pix").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("pix_configure").setLabel("Configurar meu Pix").setEmoji("⚙️").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("pix_edit").setLabel("Editar meu Pix").setEmoji("✏️").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("pix_remove").setLabel("Remover meu Pix").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
       )
     ]
   };
@@ -2189,7 +2189,7 @@ client.on("interactionCreate", async interaction => {
           if (!(await requireStreamer(interaction))) return;
 
           if (!db.config.streamerRoleId) {
-            return deny(interaction, "❌ O cargo de Influencer / Streamer ainda não foi configurado no `/config`.");
+            return deny(interaction, "❌ O cargo de Influencer / Streamer ainda ainda não foi configurado no `/config`.");
           }
 
           const modal = new ModalBuilder()
@@ -2282,9 +2282,9 @@ client.on("interactionCreate", async interaction => {
         const current = db.pix?.[interaction.user.id] || {};
         const modal = new ModalBuilder()
           .setCustomId("pix_register_panel")
-          .setTitle(interaction.customId === "pix_edit" ? "Editar Pix" : "Configurar Pix");
+          .setTitle(interaction.customId === "pix_edit" ? "Editar meu Pix" : "Configurar meu Pix");
         modal.addComponents(
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pix_name").setLabel("Nome do titular").setPlaceholder("Ex.: Gustavo Mendanha").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(current.name || "")),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pix_name").setLabel("Nome usado no Pix").setPlaceholder("Ex.: Gustavo Mendanha").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(current.name || "")),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pix_key").setLabel("Chave Pix").setPlaceholder("CPF, CNPJ, e-mail, telefone ou chave aleatória").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200).setValue(current.key || ""))
         );
         return safeShowModal(interaction, modal);
@@ -2301,7 +2301,7 @@ client.on("interactionCreate", async interaction => {
         await refreshPixPanel(interaction.guild).catch(() => {});
 
         return interaction.followUp({
-          content: "🗑️ Seu cadastro Pix foi removido do painel.",
+          content: "🗑️ Seu cadastro do Pix foi removido.",
           flags: MessageFlags.Ephemeral
         }).catch(() => {});
       }
@@ -2310,12 +2310,12 @@ client.on("interactionCreate", async interaction => {
         db.pix = {};
         saveDatabase();
         return interaction.update({
-          embeds: [makeEmbed("💳 CADASTRO PIX", "🗑️ **Cadastro Pix removido com sucesso.**")],
+          embeds: [makeEmbed("💳 CADASTRO DO PIX", "🗑️ **Cadastro do Pix removido com sucesso.**")],
           components: [
             new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId("pix_configure").setLabel("Configurar Pix").setEmoji("⚙️").setStyle(ButtonStyle.Success),
-              new ButtonBuilder().setCustomId("pix_edit").setLabel("Editar Pix").setEmoji("✏️").setStyle(ButtonStyle.Primary).setDisabled(true),
-              new ButtonBuilder().setCustomId("pix_remove").setLabel("Remover Cadastro").setEmoji("🗑️").setStyle(ButtonStyle.Danger).setDisabled(true)
+              new ButtonBuilder().setCustomId("pix_configure").setLabel("Configurar meu Pix").setEmoji("⚙️").setStyle(ButtonStyle.Success),
+              new ButtonBuilder().setCustomId("pix_edit").setLabel("Editar meu Pix").setEmoji("✏️").setStyle(ButtonStyle.Primary).setDisabled(true),
+              new ButtonBuilder().setCustomId("pix_remove").setLabel("Remover meu cadastro").setEmoji("🗑️").setStyle(ButtonStyle.Danger).setDisabled(true)
             )
           ]
         });
@@ -2498,7 +2498,7 @@ client.on("interactionCreate", async interaction => {
 
         return interaction.reply({
           content: [
-            "📢 **CANAIS DOS TICKETS**",
+            "📢 **CANAIS DE ATENDIMENTO**",
             "",
             "Selecione o **canal** correspondente a cada tipo de atendimento."
           ].join("\n"),
@@ -2516,7 +2516,7 @@ client.on("interactionCreate", async interaction => {
         if (!(await requireAdmin(interaction))) return;
 
         return interaction.reply({
-          content: "🎮 **CANAL DAS APOSTAS**\n\nEscolha o canal onde cada aposta será criada como uma thread privada.\n\n🔒 O Mediador responsável só terá acesso depois que os 2 jogadores confirmarem.\n👤 Cada aposta terá apenas 1 Mediador responsável.",
+          content: "🎮 **CANAL DE APOSTAS**\n\nEscolha o canal onde cada aposta será criada como uma thread privada.\n\n🔒 O Mediador pessoa da equipe só terá acesso depois que os 2 jogadores confirmarem.\n👤 Cada aposta terá apenas 1 Mediador pessoa da equipe.",
           components: [
             new ActionRowBuilder().addComponents(
               new ChannelSelectMenuBuilder()
@@ -2582,7 +2582,7 @@ client.on("interactionCreate", async interaction => {
         saveDatabase();
 
         return interaction.reply({
-          content: "✅ Configuração salva.",
+          content: "✅ Tudo certo! Configuração salva.",
           flags: MessageFlags.Ephemeral
         });
       }
@@ -2600,7 +2600,7 @@ client.on("interactionCreate", async interaction => {
             new TextInputBuilder()
               .setCustomId("ticket_title")
               .setLabel("Título do painel")
-              .setPlaceholder("🎫 CENTRAL DE TICKETS")
+              .setPlaceholder("🎫 CENTRAL DE ATENDIMENTO")
               .setStyle(TextInputStyle.Short)
               .setRequired(false)
               .setMaxLength(256)
@@ -2870,7 +2870,7 @@ client.on("interactionCreate", async interaction => {
         }).catch(() => {});
       }
 
-      /* FILA MEDIADORES */
+      /* FILA DE MEDIADORES */
       if (action === "mediator_join") {
         if (!(await requireMediator(interaction))) return;
         await interaction.deferUpdate();
@@ -2948,7 +2948,7 @@ client.on("interactionCreate", async interaction => {
             makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
               `📱 **Modalidade:** ${analysis.type}`,
               `👤 **Solicitante:** <@${analysis.requesterId}>`,
-              `🔎 **Analista responsável:** <@${interaction.user.id}>`,
+              `🔎 **Analista pessoa da equipe:** <@${interaction.user.id}>`,
               "",
               "🟢 **Status:** Em atendimento",
               `📍 **Canal:** ${analysisChannel}`
@@ -3021,7 +3021,7 @@ client.on("interactionCreate", async interaction => {
         if (bet.mediatorId) {
           await interaction.channel.send({
             content: `<@${bet.mediatorId}>`,
-            embeds: [makeEmbed("👨‍⚖️ APOSTA ATRIBUÍDA", "🟢 A aposta foi confirmada. Você é o Mediador responsável e já pode gerenciá-la.")]
+            embeds: [makeEmbed("👨‍⚖️ APOSTA ATRIBUÍDA", "🟢 A aposta foi confirmada. Você é o Mediador pessoa da equipe e já pode gerenciá-la.")]
           }).catch(() => {});
         }
 
@@ -3077,7 +3077,7 @@ client.on("interactionCreate", async interaction => {
         if (bet.mediatorId && bet.mediatorId !== interaction.user.id) {
           return deny(
             interaction,
-            "❌ Você não é o Mediador responsável por esta aposta."
+            "❌ Você não é o Mediador pessoa da equipe por esta aposta."
           );
         }
 
@@ -3085,7 +3085,7 @@ client.on("interactionCreate", async interaction => {
         return interaction.reply({
           content: "🏆 Selecione um dos 2 jogadores:",
           components: [new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId(`result_normal|${bet.id}`).setPlaceholder("Escolher vencedor")
+            new StringSelectMenuBuilder().setCustomId(`result_normal|${bet.id}`).setPlaceholder("Escolher quem venceu")
               .addOptions(await playerSelectOptions(interaction.guild, bet.players, "🏆"))
           )], flags: MessageFlags.Ephemeral
         });
@@ -3103,7 +3103,7 @@ client.on("interactionCreate", async interaction => {
         if (bet.mediatorId && bet.mediatorId !== interaction.user.id) {
           return deny(
             interaction,
-            "❌ Você não é o Mediador responsável por esta aposta."
+            "❌ Você não é o Mediador pessoa da equipe por esta aposta."
           );
         }
 
@@ -3111,7 +3111,7 @@ client.on("interactionCreate", async interaction => {
         return interaction.reply({
           content: "🚫 Selecione um dos 2 jogadores:",
           components: [new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId(`result_wo|${bet.id}`).setPlaceholder("Escolher vencedor por W.O.")
+            new StringSelectMenuBuilder().setCustomId(`result_wo|${bet.id}`).setPlaceholder("Escolher quem venceu por W.O.")
               .addOptions(await playerSelectOptions(interaction.guild, bet.players, "🚫"))
           )], flags: MessageFlags.Ephemeral
         });
@@ -3129,7 +3129,7 @@ client.on("interactionCreate", async interaction => {
         if (bet.mediatorId && bet.mediatorId !== interaction.user.id) {
           return deny(
             interaction,
-            "❌ Você não é o Mediador responsável."
+            "❌ Você não é o Mediador pessoa da equipe."
           );
         }
 
@@ -3284,7 +3284,7 @@ client.on("interactionCreate", async interaction => {
         // Não fazer deferUpdate aqui: showModal exige uma interação ainda não respondida.
         const modal = new ModalBuilder()
           .setCustomId(`ticket_rename|${ticket.id}`)
-          .setTitle("Mudar nome do canal");
+          .setTitle("Renomear atendimento");
 
         modal.addComponents(
           new ActionRowBuilder().addComponents(
@@ -3632,7 +3632,7 @@ client.on("interactionCreate", async interaction => {
 
       if (["ticket_channel_support", "ticket_channel_refund", "ticket_channel_vacancies", "ticket_channel_event"].includes(interaction.customId)) {
         return interaction.update({
-          content: "📢 **CANAIS DOS TICKETS**\n\nCanal salvo. Continue configurando os outros canais ou use **Voltar** para retornar ao menu principal.",
+          content: "📢 **CANAIS DE ATENDIMENTO**\n\nCanal salvo. Continue configurando os outros canais ou use **Voltar** para retornar ao menu principal.",
           embeds: [],
           components: configTicketChannelsComponents()
         });
@@ -3640,7 +3640,7 @@ client.on("interactionCreate", async interaction => {
 
       if (interaction.customId === "bet_channel") {
         return interaction.update({
-          content: "🎮 **CANAL DAS APOSTAS**\n\nCanal salvo. Use **Voltar** para retornar ao menu principal.",
+          content: "🎮 **CANAL DE APOSTAS**\n\nCanal salvo. Use **Voltar** para retornar ao menu principal.",
           embeds: [],
           components: configSingleChannelComponents("bet_channel", "🎮 Selecionar canal das apostas")
         });
@@ -3655,7 +3655,7 @@ client.on("interactionCreate", async interaction => {
       }
 
       return interaction.update({
-        content: "✅ **Configuração salva com sucesso.**",
+        content: "✅ **Tudo certo! Configuração salva.**",
         embeds: [configEmbed()],
         components: configButtons()
       });
@@ -3764,7 +3764,7 @@ client.on("interactionCreate", async interaction => {
         const ticketGuild = interaction.guild || client.guilds.cache.get(ticket.guildId) || await client.guilds.fetch(ticket.guildId).catch(() => null);
         const ticketMember = ticketGuild ? await ticketGuild.members.fetch(interaction.user.id).catch(() => null) : null;
         const hasSupportRole = memberIsTicketResponsible(ticketMember);
-        if (!hasSupportRole) return deny(interaction, "❌ Apenas os cargos responsáveis pelos tickets podem usar esta função.");
+        if (!hasSupportRole) return deny(interaction, "❌ Apenas a equipe responsável pelos atendimentos pode fazer isso.");
 
         const ticketChannel = ticketGuild ? await ticketGuild.channels.fetch(ticket.channelId).catch(() => null) : null;
         if (!ticketChannel) return deny(interaction, "❌ O canal deste ticket não foi encontrado.");
@@ -3790,7 +3790,7 @@ client.on("interactionCreate", async interaction => {
         if (banner && !validUrl(banner)) return deny(interaction, "❌ A URL do banner é inválida.");
         if (thumbnail && !validUrl(thumbnail)) return deny(interaction, "❌ A URL da thumbnail é inválida.");
 
-        db.config.ticketPanelTitle = title || "🎫 CENTRAL DE TICKETS";
+        db.config.ticketPanelTitle = title || "🎫 CENTRAL DE ATENDIMENTO";
         db.config.ticketPanelDescription = description || null;
         db.config.ticketPanelBanner = banner || null;
         db.config.ticketPanelThumbnail = thumbnail || null;
@@ -3882,7 +3882,7 @@ client.on("interactionCreate", async interaction => {
         const key = interaction.fields.getTextInputValue("pix_key").trim();
 
         if (!name || !key) {
-          return deny(interaction, "❌ Nome e chave Pix são obrigatórios.");
+          return deny(interaction, "❌ Informe o nome e a chave Pix para continuar.");
         }
 
         const qr = createPixQrUrl(name, key);
@@ -3904,13 +3904,13 @@ client.on("interactionCreate", async interaction => {
         await refreshPixPanel(interaction.guild).catch(() => {});
 
         const actionText = previous
-          ? "✏️ **Cadastro Pix editado com sucesso.**"
-          : "✅ **Cadastro Pix realizado com sucesso.**";
+          ? "✏️ **Seu Pix foi atualizado com sucesso.**"
+          : "✅ **Seu Pix foi cadastrado com sucesso.**";
 
-        const e = makeEmbed("💳 CADASTRO PIX", [
+        const e = makeEmbed("💳 CADASTRO DO PIX", [
           actionText,
           "",
-          `👤 **Titular:** ${name}`,
+          `👤 **Nome:** ${name}`,
           `🔑 **Chave Pix:** \`${key}\``,
           `🪪 **Discord:** <@${interaction.user.id}>`,
           "",
@@ -4086,7 +4086,7 @@ client.on("interactionCreate", async interaction => {
           return interaction.update({ content: "📢 **CANAIS DO SISTEMA**\n\nConfigure cada canal. Depois de escolher um canal, você continuará nesta tela. Use **Voltar** para retornar ao menu principal.", components: configSystemChannelsComponents() });
         }
         if (selected === "config_bet_channel") {
-          return interaction.update({ content: "🎮 **CANAL DAS APOSTAS**\n\nEscolha o canal onde cada aposta será criada como uma thread privada.\n\n🔒 O Mediador responsável só terá acesso depois que os 2 jogadores confirmarem.\n👤 Cada aposta terá apenas 1 Mediador responsável.\n\nUse **Voltar** para retornar ao menu principal.", components: configSingleChannelComponents("bet_channel", "🎮 Selecionar canal das apostas") });
+          return interaction.update({ content: "🎮 **CANAL DE APOSTAS**\n\nEscolha o canal onde cada aposta será criada como uma thread privada.\n\n🔒 O Mediador pessoa da equipe só terá acesso depois que os 2 jogadores confirmarem.\n👤 Cada aposta terá apenas 1 Mediador pessoa da equipe.\n\nUse **Voltar** para retornar ao menu principal.", components: configSingleChannelComponents("bet_channel", "🎮 Selecionar canal das apostas") });
         }
         if (selected === "config_streamer_category") {
           return interaction.update({ content: "🎥 **CATEGORIA STREAMER**\n\nEscolha a categoria onde os canais das filas de Streamer serão criados.\n\nUse **Voltar** para retornar ao menu principal.", components: configSingleChannelComponents("streamer_category", "🎥 Selecionar categoria Streamer", ChannelType.GuildCategory) });
@@ -4100,13 +4100,13 @@ client.on("interactionCreate", async interaction => {
           return interaction.update({ content: "✅ **Fila de Mediadores publicada/atualizada com sucesso.**", components: configButtons(), embeds: [] });
         }
         if (selected === "config_ticket_channels") {
-          return interaction.update({ content: "📢 **CANAIS DOS TICKETS**\n\nEscolha o canal correspondente a cada tipo de atendimento. Depois de escolher um canal, você continuará nesta tela. Use **Voltar** para retornar ao menu principal.", components: configTicketChannelsComponents() });
+          return interaction.update({ content: "📢 **CANAIS DE ATENDIMENTO**\n\nEscolha um canal para cada tipo de atendimento. Depois de escolher um canal, você continuará nesta tela. Use **Voltar** para retornar ao menu principal.", components: configTicketChannelsComponents() });
         }
         if (selected === "config_ticket_panel") {
           const c = db.config;
           const modal = new ModalBuilder().setCustomId("ticket_panel_modal").setTitle("Configurar painel de Tickets");
           modal.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ticket_title").setLabel("Título do painel").setPlaceholder("🎫 CENTRAL DE TICKETS").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256).setValue(c.ticketPanelTitle || "")),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ticket_title").setLabel("Título do painel").setPlaceholder("🎫 CENTRAL DE ATENDIMENTO").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256).setValue(c.ticketPanelTitle || "")),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ticket_description").setLabel("Descrição do painel").setPlaceholder("Explique como o usuário deve abrir um ticket.").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(4000).setValue(c.ticketPanelDescription || "")),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ticket_banner").setLabel("Banner — URL da imagem").setPlaceholder("https://...").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(c.ticketPanelBanner || "")),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ticket_thumbnail").setLabel("Thumbnail — URL da imagem").setPlaceholder("https://...").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(c.ticketPanelThumbnail || "")),
@@ -4121,7 +4121,7 @@ client.on("interactionCreate", async interaction => {
         const [resultAction, betId] = interaction.customId.split("|");
         const bet = db.bets[betId];
         if (!bet) return deny(interaction, "❌ Aposta não encontrada.");
-        if (bet.mediatorId && bet.mediatorId !== interaction.user.id) return deny(interaction, "❌ Você não é o Mediador responsável.");
+        if (bet.mediatorId && bet.mediatorId !== interaction.user.id) return deny(interaction, "❌ Você não é o Mediador pessoa da equipe.");
         if (bet.confirmedBy.length < bet.players.length) return deny(interaction, "🔒 Os 2 jogadores precisam confirmar.");
         if (bet.resultType) return deny(interaction, "❌ O resultado desta aposta já foi definido.");
         const winnerId = interaction.values[0];
@@ -4244,7 +4244,7 @@ client.on("interactionCreate", async interaction => {
       const bet = db.bets[betId];
       if (!bet) return deny(interaction, "❌ Aposta não encontrada.");
       if (bet.mediatorId && bet.mediatorId !== interaction.user.id) {
-        return deny(interaction, "❌ Você não é o Mediador responsável.");
+        return deny(interaction, "❌ Você não é o Mediador pessoa da equipe.");
       }
       if (bet.confirmedBy.length < bet.players.length) {
         return deny(interaction, "🔒 Aguarde os 2 jogadores confirmarem.");
