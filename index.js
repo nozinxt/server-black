@@ -740,31 +740,14 @@ async function renameBetThreadAfterConfirmation(guild, bet) {
 }
 
 function betEmbed(bet) {
-  const confirmed = new Set(bet.confirmedBy || []);
-  const confirmationLines = bet.players.map((id, index) => {
-    const status = confirmed.has(id) ? "✅ Confirmado" : "⏳ Esperando";
-    return `**${index + 1}.** <@${id}> — ${status}`;
-  }).join("\n");
+  const amountToPay = Number((Number(bet.value) + Number(db.config.fee || 0)).toFixed(2));
+  const amountToReceive = Number((Number(bet.value) * 2).toFixed(2));
 
-  return makeEmbed("🎮 CONFIRME A APOSTA", [
+  return makeEmbed("🎮 Confirme a aposta", [
     `🎮 **Formato:** ${bet.format}`,
     `📱 **Modalidade:** ${modalityName(bet.modality)}`,
-    `💰 **Valor:** ${money(bet.value)}`,
-    `🏆 **Prêmio:** ${money(Number(bet.value) * 2)}`,
-    "",
-    "👥 **Jogadores na fila**",
-    confirmationLines,
-    "",
-    "📌 **Como vai funcionar**",
-    "1️⃣ Confira o formato, a modalidade e o valor.",
-    "2️⃣ Os dois jogadores precisam clicar em **Confirmar**.",
-    "3️⃣ O painel ficará no chat enquanto vocês confirmam.",
-    "4️⃣ Assim que os dois confirmarem, os dados para pagamento serão enviados automaticamente.",
-    "5️⃣ O Mediador só terá acesso depois que os dois confirmarem.",
-    "",
-    bet.confirmedBy.length === bet.players.length
-      ? "🟢 **Os dois jogadores confirmaram a aposta.**"
-      : `⏳ **Esperando:** ${bet.players.length - bet.confirmedBy.length} confirmação(ões).`
+    `💳 **Valor a pagar:** ${money(amountToPay)}`,
+    `🏆 **Valor a receber:** ${money(amountToReceive)}`
   ].join("\n"));
 }
 
@@ -816,32 +799,31 @@ function paymentMessage(bet) {
 
   if (!pix) {
     return {
-      embeds: [
-        makeEmbed("💳 PAGAMENTO", [
-          `💰 **Valor:** ${money(amountToPay)}`,
-          "",
-          "⚠️ **O PIX ainda ainda não foi configurado.**",
-          "Um ADM precisa cadastrar o Pix em `/painel cadastro` antes de continuar."
-        ].join("\n"))
-      ]
+      content: [
+        "⚠️ **O Pix ainda não foi configurado.**",
+        "",
+        `💳 **Valor a pagar:** ${money(amountToPay)}`,
+        "Um administrador precisa cadastrar o Pix antes de continuar."
+      ].join("\n")
     };
   }
 
-  const embed = makeEmbed("💳 PAGAMENTO", [
-    `💰 **Valor:** ${money(amountToPay)}`,
+  const lines = [
+    "💳 **Pagamento**",
     "",
-    `👤 **Recebedor:** ${pix.name}`,
-    `🔑 **Chave PIX:** \`${pix.key}\``,
+    `💰 **Valor a pagar:** ${money(amountToPay)}`,
+    `👤 **Nome:** ${pix.name}`,
+    `🔑 **Chave Pix:** \`${pix.key}\``,
     "",
-    "📌 **Faça o pagamento e aguarde as instruções do Mediador.**"
-  ].join("\n"));
+    "Copie a chave acima e faça o pagamento. Depois, aguarde o Mediador confirmar o pagamento."
+  ];
 
   if (pix.qr && validUrl(pix.qr)) {
-    embed.setImage(pix.qr);
+    lines.push("", `📲 **QR Code:** ${pix.qr}`);
   }
 
   return {
-    embeds: [embed]
+    content: lines.join("\n")
   };
 }
 
@@ -3021,13 +3003,13 @@ client.on("interactionCreate", async interaction => {
         if (bet.mediatorId) {
           await interaction.channel.send({
             content: `<@${bet.mediatorId}>`,
-            embeds: [makeEmbed("👨‍⚖️ APOSTA ATRIBUÍDA", "🟢 A aposta foi confirmada. Você é o Mediador pessoa da equipe e já pode gerenciá-la.")]
+            embeds: [makeEmbed("👨‍⚖️ APOSTA ATRIBUÍDA", "🟢 A aposta foi confirmada. Você ficou responsável por este atendimento e já pode acompanhar a partida.")]
           }).catch(() => {});
         }
 
         saveDatabase();
         return interaction.editReply({
-          content: "✅ Todos os jogadores confirmaram. Pagamento liberado e acesso do Mediador concedido.",
+          content: "✅ Todo mundo confirmou. O pagamento foi liberado e o Mediador já pode acompanhar a aposta.",
           components: []
         });
       }
