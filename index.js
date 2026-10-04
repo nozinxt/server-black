@@ -845,54 +845,6 @@ function paymentMessage(bet) {
   };
 }
 
-async function createPrivateAnalysisChannel(guild, analysis) {
-  const category = db.config.streamerCategoryId
-    ? await guild.channels.fetch(db.config.streamerCategoryId).catch(() => null)
-    : null;
-
-  const overwrites = [
-    {
-      id: guild.roles.everyone.id,
-      deny: [PermissionFlagsBits.ViewChannel]
-    },
-    {
-      id: analysis.requesterId,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory
-      ]
-    },
-    ...(analysis.analystId
-      ? [{
-          id: analysis.analystId,
-          allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.ManageMessages
-          ]
-        }]
-      : analysis.analystRoleId
-        ? [{
-            id: analysis.analystRoleId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory
-            ]
-          }]
-        : [])
-  ];
-
-  return guild.channels.create({
-    name: `analise-${analysis.type.toLowerCase()}-${analysis.id.slice(-6)}`,
-    type: ChannelType.GuildText,
-    parent: category?.type === ChannelType.GuildCategory ? category.id : undefined,
-    permissionOverwrites: overwrites
-  });
-}
-
 async function createPrivateBetChannel(guild, bet) {
   const parent = db.config.betChannelId
     ? await guild.channels.fetch(db.config.betChannelId).catch(() => null)
@@ -1741,7 +1693,7 @@ client.once('clientReady', async () => {
 ======================================================== */
 
 async function processAnalysis(message, type) {
-  if (!message.guild) return;
+  if (!message.guild || !message.channel?.isTextBased()) return;
 
   if (!db.config.analystRoleId) {
     await message.reply("❌ O cargo de Analista ainda não foi configurado no `/config`.").catch(() => {});
@@ -1756,34 +1708,40 @@ async function processAnalysis(message, type) {
     type,
     analystId: null,
     analystRoleId: db.config.analystRoleId,
-    channelId: null,
+    channelId: message.channel.id,
     status: "pending",
     createdAt: Date.now()
   };
 
-  let privateChannel;
+  // A solicitação usa exatamente o canal onde o comando foi enviado.
+  // Se o canal for privado, libera o cargo de Analista para que ele consiga
+  // acessar a solicitação. Nenhum canal novo é criado.
   try {
-    privateChannel = await createPrivateAnalysisChannel(message.guild, analysis);
+    if (message.channel.permissionOverwrites?.edit) {
+      await message.channel.permissionOverwrites.edit(db.config.analystRoleId, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true
+      });
+    }
   } catch (error) {
-    console.error("❌ Não foi possível criar o canal privado da análise:", error);
-    await message.reply("❌ Não foi possível criar o canal privado da análise. Verifique as permissões do bot.").catch(() => {});
+    console.error("❌ Não foi possível liberar o acesso do Analista ao canal:", error);
+    await message.reply("❌ Não foi possível liberar o acesso do Analista a este canal. Verifique as permissões do bot.").catch(() => {});
     return;
   }
 
-  analysis.channelId = privateChannel.id;
   db.analyses[id] = analysis;
   saveDatabase();
 
-  // A solicitação existe somente dentro do canal privado.
-  await privateChannel.send({
+  // A solicitação fica no próprio canal em que o comando foi usado.
+  await message.channel.send({
     content: `<@${message.author.id}> <@&${db.config.analystRoleId}>`,
     embeds: [
       makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
         `📱 **Modalidade:** ${type}`,
         `👤 **Solicitante:** <@${message.author.id}>`,
         "",
-        "⏳ **Status:** Aguardando Analista",
-        "🔒 **Canal privado de atendimento.**"
+        "⏳ **Status:** Aguardando Analista"
       ].join("\n"))
     ],
     components: [
@@ -1796,16 +1754,15 @@ async function processAnalysis(message, type) {
       )
     ]
   }).catch(async error => {
-    console.error("❌ Não foi possível publicar a solicitação no canal privado:", error);
+    console.error("❌ Não foi possível publicar a solicitação no canal:", error);
     delete db.analyses[id];
     saveDatabase();
-    await privateChannel.delete("Falha ao publicar solicitação de análise").catch(() => {});
   });
 
-  // O comando público não recebe a solicitação; apenas é removido.
+  // O comando original não precisa permanecer no canal; a solicitação acima
+  // continua no mesmo canal para o Analista acessar e assumir.
   await message.delete().catch(() => {});
 }
-
 client.on("messageCreate", async message => {
   if (message.author.bot) return;
   if (!message.guild) return;
@@ -2960,17 +2917,16 @@ client.on("interactionCreate", async interaction => {
         if (!analysis) return deny(interaction, "❌ Solicitação não encontrada.");
         if (analysis.status !== "pending") return deny(interaction, "❌ Essa solicitação já foi assumida.");
 
-        const privateChannel = interaction.channel;
-        if (!privateChannel || !privateChannel.isTextBased()) {
-          return deny(interaction, "❌ O canal privado da análise é inválido.");
+        const analysisChannel = await interaction.guild.channels.fetch(analysis.channelId).catch(() => null);
+        if (!analysisChannel || !analysisChannel.isTextBased()) {
+          return deny(interaction, "❌ O canal da análise não está disponível.");
         }
 
         analysis.analystId = interaction.user.id;
         analysis.status = "assigned";
-        analysis.channelId = privateChannel.id;
 
         try {
-          await grantChannelAccess(privateChannel, analysis.analystId, {
+          await grantChannelAccess(analysisChannel, analysis.analystId, {
             ViewChannel: true,
             SendMessages: true,
             ReadMessageHistory: true,
@@ -2980,13 +2936,14 @@ client.on("interactionCreate", async interaction => {
           analysis.analystId = null;
           analysis.status = "pending";
           console.error("❌ Não foi possível garantir acesso ao Analista:", error);
-          return deny(interaction, "❌ Não foi possível liberar o acesso do Analista ao canal privado.");
+          return deny(interaction, "❌ Não foi possível liberar o acesso do Analista ao canal da análise.");
         }
 
         saveDatabase();
 
         // Atualiza a própria mensagem da solicitação: nenhum novo embed ou mensagem.
         return interaction.update({
+          content: `🤖 **O bot adicionou <@${interaction.user.id}> ao canal para assumir esta análise.**`,
           embeds: [
             makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
               `📱 **Modalidade:** ${analysis.type}`,
@@ -2994,7 +2951,7 @@ client.on("interactionCreate", async interaction => {
               `🔎 **Analista responsável:** <@${interaction.user.id}>`,
               "",
               "🟢 **Status:** Em atendimento",
-              `🔒 **Canal privado:** ${privateChannel}`
+              `📍 **Canal:** ${analysisChannel}`
             ].join("\n"))
           ],
           components: []
