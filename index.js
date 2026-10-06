@@ -223,6 +223,11 @@ function mergeDefaults(base, data) {
 
 let db = loadDatabase();
 
+// Compatibilidade com filas antigas: elas continuam ativas por padrão.
+for (const queue of Object.values(db.streamerQueues || {})) {
+  if (typeof queue.active !== "boolean") queue.active = true;
+}
+
 // Configurações temporárias do comando /fila por usuário.
 const filaSetup = new Map();
 
@@ -280,14 +285,13 @@ function saveDatabase() {
     flushDatabase().catch(error =>
       console.error("❌ Erro no salvamento agendado:", error)
     );
-  }, 500);
+  }, 150);
 }
 
 // Salvamento de segurança periódico. Mesmo que alguma interação falhe no meio
 // de uma operação, o estado atual é persistido regularmente.
 setInterval(() => {
-  if (shutdownStarted) return;
-  savePending = true;
+  if (shutdownStarted || !savePending) return;
   flushDatabase().catch(error =>
     console.error("❌ Erro no salvamento periódico:", error)
   );
@@ -958,29 +962,31 @@ async function createBetFromQueue(interaction, queue) {
 ======================================================== */
 
 function streamerQueueEmbed(queue, guild) {
-  const streamerMention = `<@${queue.streamerId}>`;
-  const waiting = queue.players?.length
-    ? queue.players.map((id, index) => `**${index + 1}.** <@${id}>`).join("\n")
-    : "_Ninguém na fila no momento._";
+  const streamerName = guild?.members?.cache?.get(queue.streamerId)?.displayName || "Streamer";
+  const status = queue.active === false ? "🔴 **Fila desativada**" : "🟢 **Fila ativa**";
 
-  const active = queue.activeMatchId && db.streamerMatches?.[queue.activeMatchId]
-    ? "🟢 **Em atendimento:** 1 jogador"
-    : "🟢 **Disponível:** esperando alguém entrar";
-
-  return makeEmbed(`🎥 FILA DO ${guild?.members?.cache?.get(queue.streamerId)?.displayName || "INFLUENCER"}`, [
-    `👑 **Influencer:** ${streamerMention}`,
+  return makeEmbed(`🎥 Fila do ${streamerName}`, [
     `🎮 **Formato:** ${queue.format}`,
-    `💰 **Valor:** ${money(queue.value)}`,
+    `💳 **Valor a pagar:** ${money(queue.value)}`,
+    `🏆 **Valor a receber:** ${money(queue.value * 2)}`,
     "",
-    `📜 **Regras / descrição:**\n${queue.description || "_Nenhuma regra informada._"}`,
-    "",
-    active,
-    `👥 **Esperando:** ${queue.players?.length || 0}`,
-    waiting
+    status
   ].join("\n"));
 }
 
 function streamerQueueComponents(queue) {
+  if (queue.active === false) {
+    return [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`streamer_activate|${queue.id}`)
+          .setLabel("Ativar fila")
+          .setEmoji("🟢")
+          .setStyle(ButtonStyle.Success)
+      )
+    ];
+  }
+
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -992,18 +998,45 @@ function streamerQueueComponents(queue) {
         .setCustomId(`streamer_leave|${queue.id}`)
         .setLabel("Sair")
         .setEmoji("🚪")
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`streamer_deactivate|${queue.id}`)
+        .setLabel("Desativar fila")
+        .setEmoji("⏸️")
+        .setStyle(ButtonStyle.Secondary)
     )
   ];
 }
 
-async function refreshStreamerQueueMessage(queue, guild) {
+async function refreshStreamerQueueMessage(queue, guild, message = null) {
   if (!queue.channelId || !queue.messageId) return;
-  const channel = await guild.channels.fetch(queue.channelId).catch(() => null);
+
+  // Quando a interação veio do próprio painel, usamos a mensagem já recebida.
+  // Isso evita uma nova busca na API do Discord e deixa os cliques mais rápidos.
+  if (message?.edit) {
+    await message.edit({
+      embeds: [streamerQueueEmbed(queue, guild)],
+      components: streamerQueueComponents(queue)
+    }).catch(() => {});
+    return;
+  }
+
+  const channel = guild.channels.cache.get(queue.channelId)
+    || await guild.channels.fetch(queue.channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
-  const message = await channel.messages.fetch(queue.messageId).catch(() => null);
-  if (!message) return;
-  await message.edit({
+
+  const cachedMessage = channel.messages?.cache?.get(queue.messageId);
+  if (cachedMessage) {
+    await cachedMessage.edit({
+      embeds: [streamerQueueEmbed(queue, guild)],
+      components: streamerQueueComponents(queue)
+    }).catch(() => {});
+    return;
+  }
+
+  const fetchedMessage = await channel.messages.fetch(queue.messageId).catch(() => null);
+  if (!fetchedMessage) return;
+  await fetchedMessage.edit({
     embeds: [streamerQueueEmbed(queue, guild)],
     components: streamerQueueComponents(queue)
   }).catch(() => {});
@@ -2684,16 +2717,32 @@ client.on("interactionCreate", async interaction => {
       }
 
       /* FILA DE STREAMER */
-      if (action === "streamer_join") {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      if (action === "streamer_deactivate" || action === "streamer_activate") {
+        await interaction.deferUpdate();
         const queue = db.streamerQueues?.[parts[0]];
 
         if (!queue) return deny(interaction, "❌ Esta fila de Streamer não existe mais.");
-        if (interaction.user.id === queue.streamerId) return deny(interaction, "❌ O Influencer não pode entrar na própria fila.");
+        if (interaction.user.id !== queue.streamerId) {
+          return deny(interaction, "❌ Só quem criou a fila pode ativá-la ou desativá-la.");
+        }
+
+        queue.active = action === "streamer_activate";
+        saveDatabase();
+        await refreshStreamerQueueMessage(queue, interaction.guild, interaction.message);
+        return;
+      }
+
+      if (action === "streamer_join") {
+        await interaction.deferUpdate();
+        const queue = db.streamerQueues?.[parts[0]];
+
+        if (!queue) return deny(interaction, "❌ Esta fila de Streamer não existe mais.");
+        if (queue.active === false) return deny(interaction, "❌ Esta fila está desativada no momento.");
+        if (interaction.user.id === queue.streamerId) return deny(interaction, "❌ Você não pode entrar na própria fila.");
         if (queue.players.includes(interaction.user.id)) return deny(interaction, "❌ Você já está nessa fila.");
 
         const alreadyInStreamerQueue = Object.values(db.streamerQueues).some(
-          q => q.guildId === interaction.guild.id && q.players?.includes(interaction.user.id)
+          q => q.active !== false && q.guildId === interaction.guild.id && q.players?.includes(interaction.user.id)
         );
         if (alreadyInStreamerQueue) return deny(interaction, "❌ Você já está em uma fila de Streamer.");
 
@@ -2705,29 +2754,36 @@ client.on("interactionCreate", async interaction => {
           if (!match) {
             queue.players = queue.players.filter(id => id !== interaction.user.id);
             saveDatabase();
-            await refreshStreamerQueueMessage(queue, interaction.guild);
-            return interaction.editReply({ content: "❌ Não foi possível iniciar o atendimento agora." });
+            await refreshStreamerQueueMessage(queue, interaction.guild, interaction.message);
+            return interaction.followUp({
+              content: "❌ Não foi possível iniciar o atendimento agora.",
+              flags: MessageFlags.Ephemeral
+            });
           }
 
-          return interaction.editReply({
-            content: `✅ Você foi chamado para jogar com o Influencer. Canal privado: <#${match.channelId}>`
+          saveDatabase();
+          await refreshStreamerQueueMessage(queue, interaction.guild, interaction.message);
+          return interaction.followUp({
+            content: `✅ Você foi chamado para jogar com o Streamer. Canal privado: <#${match.channelId}>`,
+            flags: MessageFlags.Ephemeral
           });
         }
 
         saveDatabase();
-        await refreshStreamerQueueMessage(queue, interaction.guild);
-        return interaction.deleteReply().catch(() => {});
+        await refreshStreamerQueueMessage(queue, interaction.guild, interaction.message);
+        return;
       }
 
       if (action === "streamer_leave") {
+        await interaction.deferUpdate();
         const queue = db.streamerQueues?.[parts[0]];
         if (!queue) return deny(interaction, "❌ Esta fila de Streamer não existe.");
+        if (queue.active === false) return deny(interaction, "❌ Esta fila está desativada no momento.");
 
         queue.players = queue.players.filter(id => id !== interaction.user.id);
         saveDatabase();
-        await refreshStreamerQueueMessage(queue, interaction.guild);
-
-        return interaction.deferUpdate();
+        await refreshStreamerQueueMessage(queue, interaction.guild, interaction.message);
+        return;
       }
 
       /* FILA */
@@ -3686,6 +3742,7 @@ client.on("interactionCreate", async interaction => {
           description,
           players: [],
           activeMatchId: null,
+          active: true,
           createdAt: Date.now()
         };
 
