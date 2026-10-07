@@ -486,8 +486,24 @@ async function requireStreamer(interaction) {
 }
 
 async function getChannel(guild, channelId) {
-  if (!channelId) return null;
+  if (!guild || !channelId) return null;
+  const cached = guild.channels.cache.get(channelId);
+  if (cached) return cached;
   return guild.channels.fetch(channelId).catch(() => null);
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function queueId(format, modality, value, mode) {
@@ -618,7 +634,7 @@ async function mediatorQueueEmbed(guild) {
     lines.push("👨‍⚖️ **Mediadores na fila:**");
     const mediatorMembers = await Promise.all(
       db.mediatorQueue.map(userId =>
-        guild.members.fetch(userId).catch(() => null)
+        (guild.members.cache.get(userId) || guild.members.fetch(userId)).catch(() => null)
       )
     );
     for (let i = 0; i < db.mediatorQueue.length; i++) {
@@ -676,7 +692,8 @@ async function updateMediatorQueueMessage(guild) {
     let message = null;
 
     if (db.config.mediatorQueueMessageId) {
-      message = await channel.messages.fetch(db.config.mediatorQueueMessageId).catch(() => null);
+      message = channel.messages?.cache?.get(db.config.mediatorQueueMessageId)
+        || await channel.messages.fetch(db.config.mediatorQueueMessageId).catch(() => null);
     }
 
     const payload = {
@@ -734,7 +751,8 @@ function betTopicName(bet) {
 async function renameBetThreadAfterConfirmation(guild, bet) {
   if (bet.confirmedBy.length !== bet.players.length || !bet.channelId) return;
 
-  const thread = await guild.channels.fetch(bet.channelId).catch(() => null);
+  const thread = guild.channels.cache.get(bet.channelId)
+    || await guild.channels.fetch(bet.channelId).catch(() => null);
   if (!thread || typeof thread.setName !== "function") return;
 
   const name = betTopicName(bet);
@@ -833,7 +851,7 @@ function paymentMessage(bet) {
 
 async function createPrivateBetChannel(guild, bet) {
   const parent = db.config.betChannelId
-    ? await guild.channels.fetch(db.config.betChannelId).catch(() => null)
+    ? await getChannel(guild, db.config.betChannelId)
     : null;
 
   if (!parent || parent.type !== ChannelType.GuildText) {
@@ -1043,13 +1061,14 @@ async function refreshStreamerQueueMessage(queue, guild, message = null) {
 }
 
 async function createStreamerMatchChannel(guild, queue, playerId) {
-  const streamerMember = await guild.members.fetch(queue.streamerId).catch(() => null);
+  const streamerMember = guild.members.cache.get(queue.streamerId)
+    || await guild.members.fetch(queue.streamerId).catch(() => null);
   if (!streamerMember) return null;
 
   // A sala privada do Influencer usa EXCLUSIVAMENTE a categoria configurada
   // para Streamer. O acesso fica restrito ao Influencer e ao jogador chamado.
   const category = db.config.streamerCategoryId
-    ? await guild.channels.fetch(db.config.streamerCategoryId).catch(() => null)
+    ? await getChannel(guild, db.config.streamerCategoryId)
     : null;
 
   const overwrites = [
@@ -1366,14 +1385,15 @@ async function createTicketChannel(interaction, ticketType = "support") {
   );
 
   if (existing) {
-    const existingChannel = await guild.channels.fetch(existing.channelId).catch(() => null);
+    const existingChannel = guild.channels.cache.get(existing.channelId)
+      || await guild.channels.fetch(existing.channelId).catch(() => null);
     if (existingChannel) return { existing, channel: existingChannel };
     existing.status = "closed";
   }
 
   const configuredChannelId = db.config[type.channelKey];
   const configuredChannel = configuredChannelId
-    ? await guild.channels.fetch(configuredChannelId).catch(() => null)
+    ? await getChannel(guild, configuredChannelId)
     : null;
 
   if (!configuredChannel || configuredChannel.type !== ChannelType.GuildText) {
@@ -2037,10 +2057,12 @@ async function refreshPixPanel(guild) {
   const messageId = db.config.pixPanelMessageId;
   if (!guild || !channelId || !messageId) return false;
 
-  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  const channel = guild.channels.cache.get(channelId)
+    || await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) return false;
 
-  const message = await channel.messages.fetch(messageId).catch(() => null);
+  const message = channel.messages?.cache?.get(messageId)
+    || await channel.messages.fetch(messageId).catch(() => null);
   if (!message) return false;
 
   await message.edit(pixPanelPayload()).catch(() => null);
@@ -3252,7 +3274,8 @@ client.on("interactionCreate", async interaction => {
         await client.guilds.fetch(ticket.guildId).catch(() => null);
 
       const ticketMember = ticketGuild
-        ? await ticketGuild.members.fetch(interaction.user.id).catch(() => null)
+        ? (ticketGuild.members.cache.get(interaction.user.id)
+          || await ticketGuild.members.fetch(interaction.user.id).catch(() => null))
         : null;
 
       if (!memberIsTicketResponsible(ticketMember)) {
@@ -3260,7 +3283,8 @@ client.on("interactionCreate", async interaction => {
       }
 
       const ticketChannel = ticketGuild
-        ? await ticketGuild.channels.fetch(ticket.channelId).catch(() => null)
+        ? (ticketGuild.channels.cache.get(ticket.channelId)
+          || await ticketGuild.channels.fetch(ticket.channelId).catch(() => null))
         : null;
 
       if (!ticketChannel) {
@@ -3552,44 +3576,47 @@ client.on("interactionCreate", async interaction => {
         const values = ALLOWED_VALUES.slice().sort((a, b) => b - a);
 
         try {
+          const queueJobs = [];
           for (const value of values) {
-            // 1x1 = uma fila por valor, com exatamente 3 botões.
             const modes = setup.format === "1x1" ? ["choice"] : ["normal"];
-
-            for (const mode of modes) {
-              const queue = getQueue(setup.format, setup.modality, value, mode);
-              queue.parentChannelId = channel.id;
-              queue.channelId = channel.id;
-              queue.guildId = interaction.guild.id;
-
-              // Limpa a referência de tópicos antigos criados por versões anteriores.
-              // A fila em si NÃO cria tópico: ela permanece como mensagem no canal.
-              if (queue.threadId) {
-                const oldThread = await interaction.guild.channels.fetch(queue.threadId).catch(() => null);
-                if (oldThread?.isThread?.()) {
-                  await oldThread.setArchived(true, "Fila migrada para mensagem no canal").catch(() => {});
-                }
-                queue.threadId = null;
-                queue.messageId = null;
-              }
-
-              let message = queue.messageId
-                ? await channel.messages.fetch(queue.messageId).catch(() => null)
-                : null;
-
-              const payload = {
-                embeds: [queueEmbed(queue)],
-                components: queueComponents(queue)
-              };
-
-              if (message) {
-                await message.edit(payload);
-              } else {
-                message = await channel.send(payload);
-                queue.messageId = message.id;
-              }
-            }
+            for (const mode of modes) queueJobs.push({ value, mode });
           }
+
+          // Publicação paralela controlada: acelera bastante o /fila sem
+          // disparar dezenas de requisições simultâneas contra a API.
+          await runWithConcurrency(queueJobs, 4, async ({ value, mode }) => {
+            const queue = getQueue(setup.format, setup.modality, value, mode);
+            queue.parentChannelId = channel.id;
+            queue.channelId = channel.id;
+            queue.guildId = interaction.guild.id;
+
+            if (queue.threadId) {
+              const oldThread = interaction.guild.channels.cache.get(queue.threadId)
+                || await interaction.guild.channels.fetch(queue.threadId).catch(() => null);
+              if (oldThread?.isThread?.()) {
+                await oldThread.setArchived(true, "Fila migrada para mensagem no canal").catch(() => {});
+              }
+              queue.threadId = null;
+              queue.messageId = null;
+            }
+
+            const message = queue.messageId
+              ? (channel.messages.cache.get(queue.messageId)
+                || await channel.messages.fetch(queue.messageId).catch(() => null))
+              : null;
+
+            const payload = {
+              embeds: [queueEmbed(queue)],
+              components: queueComponents(queue)
+            };
+
+            if (message) {
+              await message.edit(payload);
+            } else {
+              const sent = await channel.send(payload);
+              queue.messageId = sent.id;
+            }
+          });
 
           saveDatabase();
           filaSetup.delete(interaction.user.id);
@@ -3801,11 +3828,17 @@ client.on("interactionCreate", async interaction => {
         if (!ticket || ticket.status !== "open") return deny(interaction, "❌ Este ticket não está mais aberto.");
 
         const ticketGuild = interaction.guild || client.guilds.cache.get(ticket.guildId) || await client.guilds.fetch(ticket.guildId).catch(() => null);
-        const ticketMember = ticketGuild ? await ticketGuild.members.fetch(interaction.user.id).catch(() => null) : null;
+        const ticketMember = ticketGuild
+          ? (ticketGuild.members.cache.get(interaction.user.id)
+            || await ticketGuild.members.fetch(interaction.user.id).catch(() => null))
+          : null;
         const hasSupportRole = memberIsTicketResponsible(ticketMember);
         if (!hasSupportRole) return deny(interaction, "❌ Apenas a equipe responsável pelos atendimentos pode fazer isso.");
 
-        const ticketChannel = ticketGuild ? await ticketGuild.channels.fetch(ticket.channelId).catch(() => null) : null;
+        const ticketChannel = ticketGuild
+          ? (ticketGuild.channels.cache.get(ticket.channelId)
+            || await ticketGuild.channels.fetch(ticket.channelId).catch(() => null))
+          : null;
         if (!ticketChannel) return deny(interaction, "❌ O canal deste ticket não foi encontrado.");
 
         const rawName = interaction.fields.getTextInputValue("channel_name").trim();
