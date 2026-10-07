@@ -994,8 +994,6 @@ function streamerQueueEmbed(queue, guild) {
     `🎮 **Formato:** ${queue.format}`,
     `💰 **Valor:** ${money(queue.value)}`,
     "",
-    `📜 **Regras / descrição:**\n${queue.description || "_Nenhuma regra informada._"}`,
-    "",
     active,
     `👥 **Aguardando:** ${queue.players?.length || 0}`,
     waiting
@@ -1138,7 +1136,7 @@ async function startNextStreamerMatch(queue, guild) {
         `🎯 **Formato:** ${queue.format}`,
         `💰 **Valor:** ${money(queue.value)}`,
         "",
-        `📜 **Regras:**\n${queue.description || "_Nenhuma regra informada._"}`,
+        `📜 **REGRAS DA APOSTA**\n${queue.description || "_Nenhuma regra informada._"}`,
         "",
         "👑 O Influencer é o responsável por gerenciar esta aposta.",
         "🏁 Para finalizar, o Influencer deve usar **`.f`** neste canal."
@@ -3714,7 +3712,6 @@ client.on("interactionCreate", async interaction => {
         const value = parseMoney(interaction.fields.getTextInputValue("streamer_value"));
         const format = interaction.fields.getTextInputValue("streamer_format").trim().toLowerCase();
         const description = interaction.fields.getTextInputValue("streamer_description").trim();
-
         if (!Number.isFinite(value) || value <= 0) {
           return deny(interaction, "❌ Informe um valor válido para a aposta.");
         }
@@ -3725,14 +3722,6 @@ client.on("interactionCreate", async interaction => {
 
         if (!description) {
           return deny(interaction, "❌ Informe a descrição ou as regras da fila.");
-        }
-
-        const existing = Object.values(db.streamerQueues).find(
-          queue => queue.guildId === interaction.guild.id && queue.streamerId === interaction.user.id
-        );
-
-        if (existing) {
-          return deny(interaction, "❌ Você já possui uma fila de Streamer ativa neste servidor.");
         }
 
         const queueId = `streamer-${interaction.user.id}-${Date.now()}`;
