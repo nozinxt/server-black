@@ -1003,6 +1003,18 @@ function streamerQueueEmbed(queue, guild) {
 }
 
 function streamerQueueComponents(queue) {
+  if (queue.disabled) {
+    return [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`streamer_activate|${queue.id}`)
+          .setLabel("Ativar fila")
+          .setEmoji("🟢")
+          .setStyle(ButtonStyle.Success)
+      )
+    ];
+  }
+
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -1014,7 +1026,12 @@ function streamerQueueComponents(queue) {
         .setCustomId(`streamer_leave|${queue.id}`)
         .setLabel("Sair da fila")
         .setEmoji("🚪")
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`streamer_deactivate|${queue.id}`)
+        .setLabel("Desativar fila")
+        .setEmoji("⛔")
+        .setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -2717,6 +2734,7 @@ client.on("interactionCreate", async interaction => {
         const queue = db.streamerQueues?.[parts[0]];
 
         if (!queue) return deny(interaction, "❌ Esta fila de Streamer não existe mais.");
+        if (queue.disabled) return deny(interaction, "❌ Esta fila de Streamer está desativada no momento.");
         if (interaction.user.id === queue.streamerId) return deny(interaction, "❌ O Influencer não pode entrar na própria fila.");
         if (queue.players.includes(interaction.user.id)) return deny(interaction, "❌ Você já está nessa fila.");
 
@@ -2752,6 +2770,21 @@ client.on("interactionCreate", async interaction => {
         if (!queue) return deny(interaction, "❌ Esta fila de Streamer não existe.");
 
         queue.players = queue.players.filter(id => id !== interaction.user.id);
+        saveDatabase();
+        await refreshStreamerQueueMessage(queue, interaction.guild);
+
+        return interaction.deferUpdate();
+      }
+
+      if (action === "streamer_deactivate" || action === "streamer_activate") {
+        const queue = db.streamerQueues?.[parts[0]];
+        if (!queue) return deny(interaction, "❌ Esta fila de Streamer não existe.");
+
+        if (interaction.user.id !== queue.streamerId) {
+          return deny(interaction, "❌ Apenas o Influencer responsável pode ativar ou desativar esta fila.");
+        }
+
+        queue.disabled = action === "streamer_deactivate";
         saveDatabase();
         await refreshStreamerQueueMessage(queue, interaction.guild);
 
@@ -3714,6 +3747,7 @@ client.on("interactionCreate", async interaction => {
           description,
           players: [],
           activeMatchId: null,
+          disabled: false,
           createdAt: Date.now()
         };
 
