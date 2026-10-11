@@ -562,9 +562,9 @@ function queueComponents(queue) {
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -572,8 +572,8 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && queue.format === "2x2") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -581,9 +581,9 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && ["3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -592,8 +592,8 @@ function queueComponents(queue) {
     return [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("full ump e xm8").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("full ump e xm8").setEmoji({ id: "1555678680447975565" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -604,8 +604,8 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary)
     )
   ];
 }
@@ -644,7 +644,7 @@ function safeMediatorQueueComponents() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("mediator_join").setLabel("Entrar").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("mediator_leave").setLabel("Sair").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("mediator_leave").setLabel("Sair").setStyle(ButtonStyle.Danger)
     )
   ];
 }
@@ -1179,7 +1179,7 @@ async function finishStreamerMatch(message, match) {
 
 const TICKET_TYPES = {
   support: { label: "Suporte", emoji: "🛠️", channelKey: "ticketSupportChannelId" },
-  refund: { label: "Reembolso", emoji: "💰", channelKey: "ticketRefundChannelId" },
+  refund: { label: "Reembolso", emoji: "<:pix:1558714522896703518>", channelKey: "ticketRefundChannelId" },
   vacancies: { label: "Vagas", emoji: "📋", channelKey: "ticketVacanciesChannelId" },
   event: { label: "Receber Evento", emoji: "🎉", channelKey: "ticketEventChannelId" }
 };
