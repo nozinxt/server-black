@@ -704,32 +704,18 @@ async function updateMediatorQueueMessage(guild) {
 }
 
 function betTopicName(bet) {
-  const formatNames = {
-    "1x1": "1v1",
-    "2x2": "2v2",
-    "3x3": "3v3",
-    "4x4": "4v4"
-  };
-
   const modeNames = {
     gelo_normal: "gelo normal",
     gelo_infinito: "gelo infinito",
     full_ump_xm8: "full ump e xm8",
-    normal: "confirmação",
+    normal: "normal",
     "1emu": "1emu",
     "2emu": "2emu"
   };
 
-  const format = formatNames[bet.format] || String(bet.format || "aposta").replace("x", "v");
   const modes = [...new Set((bet.playerModes || []).filter(Boolean))];
-
-  // Para filas normais, o tópico fica simplesmente como confirmação.
-  if (modes.length === 0 || modes.every(mode => mode === "normal")) {
-    return "confirmação";
-  }
-
   const labels = modes.map(mode => modeNames[mode] || mode);
-  return `${format} ${labels.join(" e ")}`.slice(0, 100);
+  return [String(bet.format || "").toLowerCase(), ...labels].filter(Boolean).join(" ").slice(0, 100) || "aposta";
 }
 
 async function renameBetThreadAfterConfirmation(guild, bet) {
@@ -738,7 +724,7 @@ async function renameBetThreadAfterConfirmation(guild, bet) {
   const thread = await guild.channels.fetch(bet.channelId).catch(() => null);
   if (!thread || typeof thread.setName !== "function") return;
 
-  const name = "confirmacao";
+  const name = betTopicName(bet);
   await thread.setName(name, "Todos os jogadores confirmaram a aposta").catch(error => {
     console.error("❌ Não foi possível renomear o tópico da aposta:", error);
   });
@@ -809,24 +795,25 @@ function paymentMessage(bet) {
 
   if (!pix) {
     return {
-      content: [
-        "💳 **PAGAMENTO VIA PIX**",
-        `💰 Valor a pagar: **${money(amountToPay)}**`,
+      embed: makeEmbed("💳 PAGAMENTO VIA PIX", [
+        `💰 **Valor a pagar:** ${money(amountToPay)}`,
         "⚠️ PIX do ADM não configurado. Um ADM deve cadastrar a chave pelo `/painel cadastro`."
-      ].join("\n")
+      ].join("\n")),
+      key: null,
+      qr: null
     };
   }
 
-  return {
-    content: [
-      "💳 **PAGAMENTO VIA PIX**",
-      `💰 Valor a pagar: **${money(amountToPay)}**`,
-      `👤 Nome: **${pix.name}**`,
-      `🔑 Chave PIX: ${pix.key}`,
-      "Faça o pagamento e aguarde a confirmação do Mediador."
-    ].join("\n"),
-    qr: pix.qr && validUrl(pix.qr) ? pix.qr : null
-  };
+  const embed = makeEmbed("💳 PAGAMENTO VIA PIX", [
+    `💰 **Valor a pagar:** ${money(amountToPay)}`,
+    `👤 **Nome:** ${pix.name}`,
+    `🔑 **Chave PIX:** ${pix.key}`,
+    "Faça o pagamento e aguarde a confirmação do Mediador."
+  ].join("\n"));
+  const qr = pix.qr && validUrl(pix.qr) ? pix.qr : createPixQrUrl(pix.name, pix.key);
+  if (qr) embed.setImage(qr);
+
+  return { embed, key: pix.key, qr };
 }
 
 async function createPrivateBetChannel(guild, bet) {
@@ -842,7 +829,7 @@ async function createPrivateBetChannel(guild, bet) {
   // Somente quando uma fila é PUXADA (2 jogadores formam uma partida),
   // criamos um tópico/thread PRIVADO debaixo desse canal, no estilo dos tickets.
   const thread = await parent.threads.create({
-    name: `🎮・APOSTA・${bet.id.slice(-8)}`.slice(0, 100),
+    name: "confirmação",
     type: ChannelType.PrivateThread,
     invitable: false,
     autoArchiveDuration: 10080,
@@ -1512,7 +1499,7 @@ function createPixPayload(name, key, city = "BRASILIA") {
 
 function createPixQrUrl(name, key) {
   const payload = createPixPayload(name, key);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(payload)}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=24&color=000000&bgcolor=FFFFFF&data=${encodeURIComponent(payload)}`;
 }
 
 /* ========================================================
@@ -2367,6 +2354,17 @@ client.on("interactionCreate", async interaction => {
       }
       const [action, ...parts] = interaction.customId.split("|");
 
+      if (action === "pix_copy") {
+        const bet = db.bets?.[parts[0]];
+        if (!bet) return deny(interaction, "❌ Aposta não encontrada.");
+        const pix = getPaymentPix();
+        if (!pix?.key) return deny(interaction, "❌ Nenhuma chave PIX está configurada.");
+        return interaction.reply({
+          content: `Chave PIX para copiar:\n${pix.key}`,
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
       /* CRIAÇÃO DE TICKETS */
       if (action === "ticket_create") {
         const ticketType = parts[0] || "support";
@@ -3072,16 +3070,24 @@ client.on("interactionCreate", async interaction => {
           }
         }
 
-        // Dados PIX em mensagem normal; QR Code separado, sem substituir o painel.
+        // Dados Pix e QR Code no embed, com apenas o botão para copiar a chave.
         const pixMessage = paymentMessage(bet);
-        await interaction.channel.send({ content: pixMessage.content }).catch(() => {});
-        if (pixMessage.qr) {
-          await interaction.channel.send({ embeds: [new EmbedBuilder().setColor(db.config.embedColor || "#5865F2").setImage(pixMessage.qr)] }).catch(() => {});
-        }
+        await interaction.channel.send({
+          embeds: [pixMessage.embed],
+          components: pixMessage.key ? [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`pix_copy|${bet.id}`)
+                .setLabel("Copiar chave PIX")
+                .setEmoji("📋")
+                .setStyle(ButtonStyle.Secondary)
+            )
+          ] : []
+        }).catch(() => {});
 
         if (bet.mediatorId) {
           await interaction.channel.send({
-            content: `<@${bet.mediatorId}> — 🟢 **A aposta foi confirmada pelos dois jogadores.** Por favor, acompanhe o pagamento.`
+            content: `<@${bet.mediatorId}> — 🟢 **A aposta foi confirmada pelos dois jogadores.** **ASSUMA!** Acompanhe o pagamento.`
           }).catch(() => {});
         }
 
