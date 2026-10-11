@@ -1026,16 +1026,36 @@ function streamerQueueComponents(queue) {
   ];
 }
 
+// Evita chamadas repetidas à API do Discord quando a fila não mudou.
+const streamerQueueRenderCache = new Map();
+
 async function refreshStreamerQueueMessage(queue, guild) {
   if (!queue.channelId || !queue.messageId) return;
+
+  const payload = {
+    embeds: [streamerQueueEmbed(queue, guild)],
+    components: streamerQueueComponents(queue)
+  };
+  const signature = JSON.stringify({
+    embeds: payload.embeds.map(embed => embed.toJSON()),
+    components: payload.components.map(row => row.toJSON())
+  });
+  const cacheKey = `${guild.id}:${queue.messageId}`;
+  if (streamerQueueRenderCache.get(cacheKey) === signature) return;
+
   const channel = await guild.channels.fetch(queue.channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
   const message = await channel.messages.fetch(queue.messageId).catch(() => null);
-  if (!message) return;
-  await message.edit({
-    embeds: [streamerQueueEmbed(queue, guild)],
-    components: streamerQueueComponents(queue)
-  }).catch(() => {});
+  if (!message) {
+    streamerQueueRenderCache.delete(cacheKey);
+    return;
+  }
+  try {
+    await message.edit(payload);
+    streamerQueueRenderCache.set(cacheKey, signature);
+  } catch {
+    // Falhas temporárias não interrompem o bot; a próxima manutenção tenta de novo.
+  }
 }
 
 async function createStreamerMatchChannel(guild, queue, playerId) {
@@ -4421,27 +4441,36 @@ client.on("interactionCreate", async interaction => {
    MANUTENÇÃO DAS FILAS
 ======================================================== */
 
+// Guarda a última versão enviada para não editar mensagens idênticas a cada ciclo.
+const queueRenderCache = new Map();
+
 async function refreshQueueMessage(queue, guild) {
   if (!queue.channelId || !queue.messageId) return;
 
-  const channel =
-    await guild.channels
-      .fetch(queue.channelId)
-      .catch(() => null);
-
-  if (!channel || !channel.isTextBased()) return;
-
-  const message =
-    await channel.messages
-      .fetch(queue.messageId)
-      .catch(() => null);
-
-  if (!message) return;
-
-  await message.edit({
+  const payload = {
     embeds: [queueEmbed(queue)],
     components: queueComponents(queue)
-  }).catch(() => {});
+  };
+  const signature = JSON.stringify({
+    embeds: payload.embeds.map(embed => embed.toJSON()),
+    components: payload.components.map(row => row.toJSON())
+  });
+  const cacheKey = `${guild.id}:${queue.messageId}`;
+  if (queueRenderCache.get(cacheKey) === signature) return;
+
+  const channel = await guild.channels.fetch(queue.channelId).catch(() => null);
+  if (!channel || !channel.isTextBased()) return;
+  const message = await channel.messages.fetch(queue.messageId).catch(() => null);
+  if (!message) {
+    queueRenderCache.delete(cacheKey);
+    return;
+  }
+  try {
+    await message.edit(payload);
+    queueRenderCache.set(cacheKey, signature);
+  } catch {
+    // Uma falha temporária será tentada novamente na próxima manutenção.
+  }
 }
 
 async function keepOpenTicketsAlive(guild) {
