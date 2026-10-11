@@ -357,30 +357,25 @@ function userStats(userId) {
 
 function configEmbed() {
   const c = db.config;
-
-  return makeEmbed("⚙️ CONFIGURAÇÃO DO BOT", [
-    "**Central de configuração**",
-    "Use o menu abaixo para escolher uma área. Cada opção explica exatamente o que será configurado.",
+  const configured = value => value ? "Configurado" : "Pendente";
+  return makeEmbed("⚙️ CONFIGURAÇÕES", [
+    "Gerencie os recursos do bot pelo menu abaixo.",
     "",
-    "👥 **Equipe e permissões**",
-    `Mediador: ${c.mediatorRoleId ? `<@&${c.mediatorRoleId}>` : "❌ Não configurado"} • Analista: ${c.analystRoleId ? `<@&${c.analystRoleId}>` : "❌ Não configurado"}`,
-    `Streamer: ${c.streamerRoleId ? `<@&${c.streamerRoleId}>` : "❌ Não configurado"} • Administradores: **${c.admins.length}/20**`,
+    "**Equipe**",
+    `Mediador: ${c.mediatorRoleId ? `<@&${c.mediatorRoleId}>` : "Pendente"} • Analista: ${c.analystRoleId ? `<@&${c.analystRoleId}>` : "Pendente"}`,
+    `Streamer: ${c.streamerRoleId ? `<@&${c.streamerRoleId}>` : "Pendente"} • ADMs: **${c.admins.length}/20**`,
     "",
-    "🎫 **Tickets**",
-    `Suporte: ${c.supportRoleId ? `<@&${c.supportRoleId}>` : "❌"} • Supervisor: ${c.supervisorRoleId ? `<@&${c.supervisorRoleId}>` : "❌"} • Auxiliar: ${c.auxiliaryRoleId ? `<@&${c.auxiliaryRoleId}>` : "❌"}`,
-    `Diretor: ${c.directorRoleId ? `<@&${c.directorRoleId}>` : "❌"} • Sub Don: ${c.subDonRoleId ? `<@&${c.subDonRoleId}>` : "❌"}`,
-    `Canais configurados: ${[c.ticketSupportChannelId, c.ticketRefundChannelId, c.ticketVacanciesChannelId, c.ticketEventChannelId].filter(Boolean).length}/4`,
+    "**Atendimento**",
+    `Cargos: ${[c.supportRoleId,c.supervisorRoleId,c.auxiliaryRoleId,c.directorRoleId,c.subDonRoleId].filter(Boolean).length}/5 • Canais de tickets: ${[c.ticketSupportChannelId,c.ticketRefundChannelId,c.ticketVacanciesChannelId,c.ticketEventChannelId].filter(Boolean).length}/4`,
     "",
-    "💰 **Apostas**",
-    `Taxa atual: **${money(c.fee)}** • Canal das Apostas: ${c.betChannelId ? `<#${c.betChannelId}>` : "❌"} • Categoria Streamer: ${c.streamerCategoryId ? `<#${c.streamerCategoryId}>` : "❌"}`,
-    `Canais de análise: ${c.ssmobChannelId ? `<#${c.ssmobChannelId}>` : "❌"} • ${c.ssemuChannelId ? `<#${c.ssemuChannelId}>` : "❌"}`,
-    `Fila de Mediadores: ${c.mediatorQueueChannelId ? `<#${c.mediatorQueueChannelId}>` : "❌"}`,
+    "**Apostas e análises**",
+    `Taxa: **${money(c.fee)}** • Canal de apostas: ${configured(c.betChannelId)} • Categoria streamer: ${configured(c.streamerCategoryId)}`,
+    `Mobile: ${configured(c.ssmobChannelId)} • Emulador: ${configured(c.ssemuChannelId)} • Fila de mediadores: ${configured(c.mediatorQueueChannelId)}`,
     "",
-    "🎨 **Aparência**",
-    `Cor: \`${c.embedColor}\` • Foto padrão: ${c.profileImage ? "✅ Configurada" : "❌ Não configurada"}`,
-    `Painel de tickets: **${c.ticketPanelTitle || "🎫 CENTRAL DE TICKETS"}**`,
+    "**Aparência**",
+    `Cor: \`${c.embedColor}\` • Foto padrão: ${configured(c.profileImage)} • Painel: ${c.ticketPanelTitle || "Central de Tickets"}`,
     "",
-    "👇 **Escolha uma opção no menu para configurar o sistema.**"
+    "Selecione uma categoria no menu para editar."
   ].join("\n"));
 }
 
@@ -567,9 +562,9 @@ function queueComponents(queue) {
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -577,8 +572,8 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && queue.format === "2x2") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -586,9 +581,9 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && ["3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -596,9 +591,9 @@ function queueComponents(queue) {
   if (["2x2", "3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("full ump e xm8").setEmoji({ id: "1555678680447975565" }).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("full ump e xm8").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -609,8 +604,8 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Primary)
     )
   ];
 }
@@ -649,7 +644,7 @@ function safeMediatorQueueComponents() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("mediator_join").setLabel("Entrar").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("mediator_leave").setLabel("Sair").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("mediator_leave").setLabel("Sair").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Danger)
     )
   ];
 }
@@ -794,7 +789,6 @@ function mediatorPanelComponents(betId) {
         .addOptions([
           { label: "Escolher vencedor", value: "winner", emoji: "🏆" },
           { label: "Vitória por W.O.", value: "wo", emoji: "🚫" },
-          { label: "Identificar sala", value: "identify", emoji: "🔎" },
           { label: "Finalizar aposta", value: "finish", emoji: "🏁" }
         ])
     )
@@ -827,8 +821,8 @@ function paymentMessage(bet) {
   if (!pix) {
     return {
       content: [
-        "💳 **PAGAMENTO DA APOSTA**",
-        `💰 **Valor:** ${money(amountToPay)}`,
+        "💳 **Pagamento via PIX**",
+        `💰 **Valor a pagar:** ${money(amountToPay)}`,
         "",
         "⚠️ **PIX DO ADM NÃO CONFIGURADO.**",
         "Um ADM deve cadastrar o Pix pelo `/painel cadastro`."
@@ -836,17 +830,15 @@ function paymentMessage(bet) {
     };
   }
 
-  return {
-    content: [
-      "💳 **PAGAMENTO DA APOSTA**",
-      `💰 **Valor:** ${money(amountToPay)}`,
-      `👤 **Titular:** ${pix.name}`,
-      `🔑 **Chave PIX:** \`${pix.key}\``,
-      "",
-      "📌 **Faça o pagamento e aguarde a orientação do Mediador.**",
-      ...(pix.qr && validUrl(pix.qr) ? [`🖼️ **QR Code:** ${pix.qr}`] : [])
-    ].join("\n")
-  };
+  const paymentEmbed = makeEmbed("💳 Pagamento via PIX", [
+    `**Valor a pagar:** ${money(amountToPay)}`,
+    `**Nome:** ${pix.name}`,
+    `**Chave PIX:** \`${pix.key}\``,
+    "",
+    "Escaneie o QR Code ou copie a chave PIX. Depois, aguarde a confirmação do Mediador."
+  ].join("\n"));
+  if (pix.qr && validUrl(pix.qr)) paymentEmbed.setImage(pix.qr);
+  return { embeds: [paymentEmbed] };
 }
 
 async function createPrivateBetChannel(guild, bet) {
@@ -1199,10 +1191,10 @@ function ticketCreationPanelComponents() {
         .setCustomId("ticket_create_menu")
         .setPlaceholder("🎫 Selecione o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", emoji: "🛠️", description: "Atendimento geral e suporte." },
-          { label: "Reembolso", value: "refund", emoji: "💰", description: "Solicitações relacionadas a reembolso." },
-          { label: "Vagas", value: "vacancies", emoji: "📋", description: "Dúvidas e solicitações sobre vagas." },
-          { label: "Receber Evento", value: "event", emoji: "🎉", description: "Atendimento para recebimento de eventos." }
+          { label: "Suporte", value: "support", emoji: { id: "1558714336539574314" }, description: "Atendimento geral e suporte." },
+          { label: "Reembolso", value: "refund", emoji: { id: "1558714522896703518" }, description: "Solicitações relacionadas a reembolso." },
+          { label: "Vagas", value: "vacancies", emoji: { id: "1558715098640683018" }, description: "Dúvidas e solicitações sobre vagas." },
+          { label: "Receber Evento", value: "event", emoji: { id: "1558714522896703518" }, description: "Atendimento para recebimento de eventos." }
         ])
     )
   ];
@@ -1544,7 +1536,7 @@ function configTicketRoleChooserComponents() {
         .setCustomId("config_ticket_role_choice")
         .setPlaceholder("🎫 Escolha qual cargo deseja configurar")
         .addOptions([
-          { label: "Suporte", value: "support", emoji: "🛠️", description: "Cargo responsável pelo Suporte." },
+          { label: "Suporte", value: "support", emoji: { id: "1558714336539574314" }, description: "Cargo responsável pelo Suporte." },
           { label: "Supervisor", value: "supervisor", emoji: "👔", description: "Cargo responsável pela Supervisão." },
           { label: "Auxiliar", value: "auxiliary", emoji: "🔧", description: "Cargo responsável pelo atendimento Auxiliar." },
           { label: "Diretor", value: "director", emoji: "🧭", description: "Cargo responsável pela Direção." },
@@ -1679,6 +1671,8 @@ async function registerCommands() {
    CLIENT
 ======================================================== */
 
+const pendingRoomIds = new Map();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -1792,17 +1786,31 @@ client.on("messageCreate", async message => {
     // 1) ID e senha em linhas separadas: "12345678\n00"
     // 2) ID e senha na mesma linha: "12345678 00"
     const roomText = message.content.trim();
-    const roomMatch =
+    let roomMatch =
       roomText.match(/^(\d{5,20})\s*\n\s*(\S{1,30})$/) ||
       roomText.match(/^(\d{5,20})\s+(\S{1,30})$/);
 
+    const betForRoom = Object.values(db.bets || {}).find(
+      item => item.guildId === message.guild.id && item.channelId === message.channel.id && item.status !== "finished"
+    );
+    const authorizedRoomMediator = betForRoom && betForRoom.mediatorId === message.author.id &&
+      await mediatorCheckAsync({ guild: message.guild, member: message.member, user: message.author });
+
+    if (!roomMatch && authorizedRoomMediator && /^\d{5,20}$/.test(roomText)) {
+      pendingRoomIds.set(`${message.guild.id}:${message.channel.id}:${message.author.id}`, roomText);
+      return;
+    }
+    if (!roomMatch && authorizedRoomMediator) {
+      const pendingKey = `${message.guild.id}:${message.channel.id}:${message.author.id}`;
+      const pendingId = pendingRoomIds.get(pendingKey);
+      if (pendingId && /^\S{1,30}$/.test(roomText)) {
+        roomMatch = [roomText, pendingId, roomText];
+        pendingRoomIds.delete(pendingKey);
+      }
+    }
+
     if (roomMatch) {
-      const bet = Object.values(db.bets || {}).find(
-        item =>
-          item.guildId === message.guild.id &&
-          item.channelId === message.channel.id &&
-          item.status !== "finished"
-      );
+      const bet = betForRoom;
 
       if (bet && bet.mediatorId === message.author.id && await mediatorCheckAsync({ guild: message.guild, member: message.member, user: message.author })) {
         const roomId = roomMatch[1];
