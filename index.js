@@ -738,7 +738,7 @@ async function renameBetThreadAfterConfirmation(guild, bet) {
   const thread = await guild.channels.fetch(bet.channelId).catch(() => null);
   if (!thread || typeof thread.setName !== "function") return;
 
-  const name = betTopicName(bet);
+  const name = "confirmacao";
   await thread.setName(name, "Todos os jogadores confirmaram a aposta").catch(error => {
     console.error("❌ Não foi possível renomear o tópico da aposta:", error);
   });
@@ -746,30 +746,19 @@ async function renameBetThreadAfterConfirmation(guild, bet) {
 
 function betEmbed(bet) {
   const confirmed = new Set(bet.confirmedBy || []);
-  const confirmationLines = bet.players.map((id, index) => {
-    const status = confirmed.has(id) ? "✅ Confirmado" : "⏳ Aguardando";
-    return `**${index + 1}.** <@${id}> — ${status}`;
-  }).join("\n");
+  const confirmationLines = bet.players.map((id, index) =>
+    `**${index + 1}.** <@${id}> ${confirmed.has(id) ? "✅" : "⏳"}`
+  ).join("\n");
 
-  return makeEmbed("🎮 CONFIRMAÇÃO DA APOSTA", [
-    `🎮 **Formato:** ${bet.format}`,
-    `📱 **Modalidade:** ${modalityName(bet.modality)}`,
-    `💰 **Valor:** ${money(bet.value)}`,
-    `🏆 **Prêmio:** ${money(Number(bet.value) * 2)}`,
+  return makeEmbed("🎮 CONFIRMAÇÃO", [
+    `**${bet.format}** • ${modalityName(bet.modality)} • **${money(bet.value)}** por jogador`,
+    `🏆 Prêmio: **${money(Number(bet.value) * 2)}**`,
     "",
-    "👥 **Jogadores**",
     confirmationLines,
-    "",
-    "📌 **Como funciona**",
-    "1️⃣ Confira o formato, modalidade e valor.",
-    "2️⃣ Cada jogador deve clicar em **Confirmar**.",
-    "3️⃣ O painel permanece no chat durante as confirmações.",
-    "4️⃣ Depois que os 2 confirmarem, os dados Pix serão enviados automaticamente.",
-    "5️⃣ O Mediador receberá acesso somente após as duas confirmações.",
     "",
     bet.confirmedBy.length === bet.players.length
       ? "🟢 **Aposta confirmada pelos 2 jogadores.**"
-      : `⏳ **Aguardando:** ${bet.players.length - bet.confirmedBy.length} confirmação(ões).`
+      : `⏳ **Confirmações:** ${bet.confirmedBy.length}/${bet.players.length}`
   ].join("\n"));
 }
 
@@ -821,24 +810,23 @@ function paymentMessage(bet) {
   if (!pix) {
     return {
       content: [
-        "💳 **Pagamento via PIX**",
-        `💰 **Valor a pagar:** ${money(amountToPay)}`,
-        "",
-        "⚠️ **PIX DO ADM NÃO CONFIGURADO.**",
-        "Um ADM deve cadastrar o Pix pelo `/painel cadastro`."
+        "💳 **PAGAMENTO VIA PIX**",
+        `💰 Valor a pagar: **${money(amountToPay)}**`,
+        "⚠️ PIX do ADM não configurado. Um ADM deve cadastrar a chave pelo `/painel cadastro`."
       ].join("\n")
     };
   }
 
-  const paymentEmbed = makeEmbed("💳 Pagamento via PIX", [
-    `**Valor a pagar:** ${money(amountToPay)}`,
-    `**Nome:** ${pix.name}`,
-    `**Chave PIX:** \`${pix.key}\``,
-    "",
-    "Escaneie o QR Code ou copie a chave PIX. Depois, aguarde a confirmação do Mediador."
-  ].join("\n"));
-  if (pix.qr && validUrl(pix.qr)) paymentEmbed.setImage(pix.qr);
-  return { embeds: [paymentEmbed] };
+  return {
+    content: [
+      "💳 **PAGAMENTO VIA PIX**",
+      `💰 Valor a pagar: **${money(amountToPay)}**`,
+      `👤 Nome: **${pix.name}**`,
+      `🔑 Chave PIX: ${pix.key}`,
+      "Faça o pagamento e aguarde a confirmação do Mediador."
+    ].join("\n"),
+    qr: pix.qr && validUrl(pix.qr) ? pix.qr : null
+  };
 }
 
 async function createPrivateBetChannel(guild, bet) {
@@ -1199,7 +1187,7 @@ async function finishStreamerMatch(message, match) {
 
 const TICKET_TYPES = {
   support: { label: "Suporte", emoji: "🛠️", channelKey: "ticketSupportChannelId" },
-  refund: { label: "Reembolso", emoji: "<:pix:1558714522896703518>", channelKey: "ticketRefundChannelId" },
+  refund: { label: "Reembolso", emoji: "<:pix:1558714634981343314>", channelKey: "ticketRefundChannelId" },
   vacancies: { label: "Vagas", emoji: "📋", channelKey: "ticketVacanciesChannelId" },
   event: { label: "Receber Evento", emoji: "🎉", channelKey: "ticketEventChannelId" }
 };
@@ -1212,7 +1200,7 @@ function ticketCreationPanelComponents() {
         .setPlaceholder("🎫 Selecione o tipo de atendimento")
         .addOptions([
           { label: "Suporte", value: "support", emoji: { id: "1558714336539574314" }, description: "Atendimento geral e suporte." },
-          { label: "Reembolso", value: "refund", emoji: { id: "1558714522896703518" }, description: "Solicitações relacionadas a reembolso." },
+          { label: "Reembolso", value: "refund", emoji: { id: "1558714634981343314" }, description: "Solicitações relacionadas a reembolso." },
           { label: "Vagas", value: "vacancies", emoji: { id: "1558715098640683018" }, description: "Dúvidas e solicitações sobre vagas." },
           { label: "Receber Evento", value: "event", emoji: { id: "1558714522896703518" }, description: "Atendimento para recebimento de eventos." }
         ])
@@ -3084,13 +3072,16 @@ client.on("interactionCreate", async interaction => {
           }
         }
 
-        // PIX é enviado como nova mensagem, preservando o painel de confirmação.
-        await interaction.channel.send(paymentMessage(bet)).catch(() => {});
+        // Dados PIX em mensagem normal; QR Code separado, sem substituir o painel.
+        const pixMessage = paymentMessage(bet);
+        await interaction.channel.send({ content: pixMessage.content }).catch(() => {});
+        if (pixMessage.qr) {
+          await interaction.channel.send({ embeds: [new EmbedBuilder().setColor(db.config.embedColor || "#5865F2").setImage(pixMessage.qr)] }).catch(() => {});
+        }
 
-        const adminIds = Array.isArray(db.config.admins) ? db.config.admins : [];
-        if (adminIds.length) {
+        if (bet.mediatorId) {
           await interaction.channel.send({
-            content: `<@${adminIds[0]}> — 🟢 **Os dois jogadores confirmaram a aposta e o pagamento foi liberado.**`
+            content: `<@${bet.mediatorId}> — 🟢 **A aposta foi confirmada pelos dois jogadores.** Por favor, acompanhe o pagamento.`
           }).catch(() => {});
         }
 
