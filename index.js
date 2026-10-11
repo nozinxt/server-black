@@ -1173,10 +1173,10 @@ async function finishStreamerMatch(message, match) {
 ======================================================== */
 
 const TICKET_TYPES = {
-  support: { label: "Suporte", emoji: "🛠️", channelKey: "ticketSupportChannelId" },
-  refund: { label: "Reembolso", emoji: "<:pix:1558714634981343314>", channelKey: "ticketRefundChannelId" },
-  vacancies: { label: "Vagas", emoji: "📋", channelKey: "ticketVacanciesChannelId" },
-  event: { label: "Receber Evento", emoji: "🎉", channelKey: "ticketEventChannelId" }
+  support: { label: "Suporte", emoji: "", channelKey: "ticketSupportChannelId" },
+  refund: { label: "Reembolso", emoji: "", channelKey: "ticketRefundChannelId" },
+  vacancies: { label: "Vagas", emoji: "", channelKey: "ticketVacanciesChannelId" },
+  event: { label: "Receber Evento", emoji: "", channelKey: "ticketEventChannelId" }
 };
 
 function ticketCreationPanelComponents() {
@@ -1184,12 +1184,12 @@ function ticketCreationPanelComponents() {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("ticket_create_menu")
-        .setPlaceholder("🎫 Selecione o tipo de atendimento")
+        .setPlaceholder("Selecione o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", emoji: { id: "1558714336539574314" }, description: "Atendimento geral e suporte." },
-          { label: "Reembolso", value: "refund", emoji: { id: "1558714634981343314" }, description: "Solicitações relacionadas a reembolso." },
-          { label: "Vagas", value: "vacancies", emoji: { id: "1558715098640683018" }, description: "Dúvidas e solicitações sobre vagas." },
-          { label: "Receber Evento", value: "event", emoji: { id: "1558714522896703518" }, description: "Atendimento para recebimento de eventos." }
+          { label: "Suporte", value: "support", description: "Atendimento geral e suporte." },
+          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso." },
+          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas." },
+          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos." }
         ])
     )
   ];
@@ -1199,20 +1199,20 @@ function ticketCreationPanelEmbed() {
   const c = db.config;
   const embed = new EmbedBuilder()
     .setColor(c.ticketPanelColor || c.embedColor || "#5865F2")
-    .setTitle(c.ticketPanelTitle || "🎫 CENTRAL DE TICKETS")
+    .setTitle(c.ticketPanelTitle || "CENTRAL DE TICKETS")
     .setDescription((c.ticketPanelDescription || [
       "**Central oficial de atendimento.**",
       "",
       "Selecione no menu abaixo o tipo de atendimento que você precisa.",
       "",
-      "🛠️ **Suporte** — Atendimento geral.",
-      "💰 **Reembolso** — Solicitações relacionadas a reembolso.",
-      "📋 **Vagas** — Dúvidas e solicitações sobre vagas.",
-      "🎉 **Receber Evento** — Atendimento para recebimento de eventos.",
+      "**Suporte** — Atendimento geral.",
+      "**Reembolso** — Solicitações relacionadas a reembolso.",
+      "**Vagas** — Dúvidas e solicitações sobre vagas.",
+      "**Receber Evento** — Atendimento para recebimento de eventos.",
       "",
-      "🔒 O atendimento é privado e somente você e a equipe responsável terão acesso."
+      "O atendimento é privado e somente você e a equipe responsável terão acesso."
     ].join("\n")).trim())
-    .setFooter({ text: c.ticketPanelFooter || "🎮 Sistema de Apostas" });
+    .setFooter({ text: c.ticketPanelFooter || "Sistema de Apostas" });
 
   if (c.ticketPanelBanner && validUrl(c.ticketPanelBanner)) embed.setImage(c.ticketPanelBanner);
   if (c.ticketPanelThumbnail && validUrl(c.ticketPanelThumbnail)) embed.setThumbnail(c.ticketPanelThumbnail);
@@ -1228,17 +1228,16 @@ function ticketPanelComponents(ticketId, claimedBy = null) {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`aux_panel|${ticketId}`)
-        .setPlaceholder("Painel do Ticket")
+        .setPlaceholder("Gerenciar ticket")
         .addOptions([
           {
             label: claimedBy ? "Ticket já assumido" : "Assumir Ticket",
             value: "claim",
-            emoji: claimedBy ? "✅" : "👤",
             description: claimedBy ? "Este ticket já possui um responsável." : "Assuma este ticket como responsável."
           },
-          { label: "Finalizar ticket", value: "finish", emoji: "🏁", description: "Finaliza este atendimento." },
-          { label: "Adicionar membro", value: "add", emoji: "➕", description: "Adiciona um membro ao ticket." },
-          { label: "Mudar nome do canal", value: "rename", emoji: "✏️", description: "Altera o nome deste ticket." }
+          { label: "Finalizar ticket", value: "finish", description: "Finaliza este atendimento." },
+          { label: "Adicionar membro", value: "add", description: "Adiciona um membro ao ticket." },
+          { label: "Mudar nome do canal", value: "rename", description: "Altera o nome deste ticket." }
         ])
     )
   ];
@@ -1246,15 +1245,15 @@ function ticketPanelComponents(ticketId, claimedBy = null) {
 
 function ticketPanelEmbed(ticket, guild) {
   const type = TICKET_TYPES[ticket.type] || TICKET_TYPES.support;
-  return makeEmbed(`${type.emoji} TICKET DE ${type.label.toUpperCase()}`, [
+  return makeEmbed(`TICKET DE ${type.label.toUpperCase()}`, [
     "**Central de atendimento deste ticket.**",
     "",
-    `👤 **Criado por:** <@${ticket.creatorId}>`,
-    `🎫 **Ticket:** <#${ticket.channelId}>`,
-    `📌 **Assunto:** ${type.label}`,
-    `🟢 **Status:** ${ticket.status === "open" ? "Em atendimento" : "Finalizado"}`,
+    `**Criado por:** <@${ticket.creatorId}>`,
+    `**Ticket:** <#${ticket.channelId}>`,
+    `**Assunto:** ${type.label}`,
+    `**Status:** ${ticket.status === "open" ? "Em atendimento" : "Finalizado"}`,
     "",
-    "🛠️ **Ações disponíveis**",
+    "**Ações disponíveis**",
     "O responsável pode usar `.aux` para abrir o painel de gerenciamento neste ticket."
   ].join("\n"));
 }
@@ -1337,7 +1336,7 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
     .trim()
     .slice(0, 82) || `usuario-${userId.slice(-5)}`;
 
-  const newName = `🔧・RESOLVENDO・${cleanName}`.slice(0, 100);
+  const newName = `resolvendo-${cleanName}`.replace(/\s+/g, "-").slice(0, 100);
 
   try {
     await ticketChannel.setName(newName, "Ticket assumido");
@@ -1434,16 +1433,16 @@ async function createTicketChannel(interaction, ticketType = "support") {
       `<@${interaction.user.id}>`,
       responsibleRoleMentions.join(" ")
     ].filter(Boolean).join(" "),
-    embeds: [makeEmbed(`${type.emoji} TICKET DE ${type.label.toUpperCase()}`, [
+    embeds: [makeEmbed(`TICKET DE ${type.label.toUpperCase()}`, [
       "**Atendimento privado criado.**",
       "",
-      `📌 **Tipo:** ${type.label}`,
-      "👥 Os cargos responsáveis foram marcados acima.",
-      "💬 Explique sua solicitação neste ticket.",
-      "⚠️ Não envie mensagens privadas para a equipe.",
+      `**Tipo:** ${type.label}`,
+      "Os cargos responsáveis foram marcados acima.",
+      "Explique sua solicitação neste ticket.",
+      "Não envie mensagens privadas para a equipe.",
       "",
-      "👤 Um responsável pode assumir o ticket pelo painel abaixo.",
-      "🛠️ `.aux` abre o painel de gerenciamento."
+      "Um responsável pode assumir o ticket pelo painel abaixo.",
+      "`.aux` abre o painel de gerenciamento."
     ].join("\n"))],
     components: ticketPanelComponents(ticket.id)
   });
@@ -1531,7 +1530,7 @@ function configTicketRoleChooserComponents() {
         .setCustomId("config_ticket_role_choice")
         .setPlaceholder("🎫 Escolha qual cargo deseja configurar")
         .addOptions([
-          { label: "Suporte", value: "support", emoji: { id: "1558714336539574314" }, description: "Cargo responsável pelo Suporte." },
+          { label: "Suporte", value: "support", description: "Cargo responsável pelo Suporte." },
           { label: "Supervisor", value: "supervisor", emoji: "👔", description: "Cargo responsável pela Supervisão." },
           { label: "Auxiliar", value: "auxiliary", emoji: "🔧", description: "Cargo responsável pelo atendimento Auxiliar." },
           { label: "Diretor", value: "director", emoji: "🧭", description: "Cargo responsável pela Direção." },
@@ -1925,7 +1924,7 @@ client.on("messageCreate", async message => {
 
       await message.channel.send({
         embeds: [makeEmbed("🛠️ PAINEL DO RESPONSÁVEL", [
-          `🎫 **Ticket:** <#${ticket.channelId}>`,
+          `**Ticket:** <#${ticket.channelId}>`,
           `👤 **Responsável:** <@${message.author.id}>`,
           "",
           "Use o menu abaixo para gerenciar este atendimento.",
@@ -1976,7 +1975,7 @@ client.on("messageCreate", async message => {
               `💰 **Valor:** ${money(bet.value)} • 🏆 **Prêmio:** ${money(bet.value * 2)}`,
               `👥 **Jogadores:** ${bet.players.map(id => `<@${id}>`).join(" • ")}`,
               "",
-              "🛠️ **Ações disponíveis**",
+              "**Ações disponíveis**",
               "Use o menu abaixo para escolher o vencedor, registrar W.O., identificar a sala ou finalizar a aposta."
             ].join("\n")
           )
@@ -2377,13 +2376,13 @@ client.on("interactionCreate", async interaction => {
 
           if (result.existing) {
             return interaction.reply({
-              content: `🎫 Você já possui um ticket aberto: ${result.channel}`,
+              content: `Você já possui um ticket aberto: ${result.channel}`,
               flags: MessageFlags.Ephemeral
             });
           }
 
           return interaction.reply({
-            content: `✅ Seu ticket de **${type.label}** foi criado: ${result.channel}`,
+            content: `Seu ticket de **${type.label}** foi criado: ${result.channel}`,
             flags: MessageFlags.Ephemeral
           });
         } catch (error) {
@@ -3255,14 +3254,16 @@ client.on("interactionCreate", async interaction => {
     if (interaction.isStringSelectMenu() && interaction.customId === "ticket_create_menu") {
       const ticketType = interaction.values[0] || "support";
       const type = TICKET_TYPES[ticketType];
-      if (!type) return deny(interaction, "❌ Tipo de ticket inválido.");
+      if (!type) return deny(interaction, "Tipo de ticket inválido.");
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const result = await createTicketChannel(interaction, ticketType);
-        if (result.existing) return interaction.reply({ content: `🎫 Você já possui um ticket aberto: ${result.channel}`, flags: MessageFlags.Ephemeral });
-        return interaction.reply({ content: `✅ Seu ticket de **${type.label}** foi criado: ${result.channel}`, flags: MessageFlags.Ephemeral });
+        if (result.existing) return interaction.editReply({ content: `Você já possui um ticket aberto: ${result.channel}` });
+        return interaction.editReply({ content: `Seu ticket de **${type.label}** foi criado: ${result.channel}` });
       } catch (error) {
-        console.error("❌ Erro ao criar ticket:", error);
-        return deny(interaction, `❌ Não foi possível criar o ticket de **${type.label}**. Configure o canal correspondente em /config > Canais dos Tickets.`);
+        console.error("Erro ao criar ticket:", error);
+        const detail = error?.message ? `\nDetalhe: ${error.message}` : "";
+        return interaction.editReply({ content: `Não foi possível criar o ticket de **${type.label}**. Confira se o canal foi configurado e se o bot tem permissões para criar e gerenciar threads.${detail}` }).catch(() => {});
       }
     }
 
@@ -3394,6 +3395,7 @@ client.on("interactionCreate", async interaction => {
     if (interaction.isUserSelectMenu()) {
       if (!interaction.customId.startsWith("aux_add_member|")) return;
       if (!(await requireSupport(interaction))) return;
+      await interaction.deferUpdate();
 
       const ticketId = interaction.customId.split("|")[1];
       const ticket = db.tickets?.[ticketId];
@@ -3431,16 +3433,16 @@ client.on("interactionCreate", async interaction => {
         ticket.addedMembers = [...new Set([...(ticket.addedMembers || []), member.id])];
         saveDatabase();
 
-        return interaction.update({
-          content: "",
+        return interaction.editReply({
+          content: `Membro ${member} adicionado ao ticket.`,
           components: []
         });
       } catch (error) {
         console.error("❌ Erro ao adicionar membro ao ticket:", error);
-        return deny(
-          interaction,
-          "❌ Não foi possível adicionar esse membro. Verifique a permissão Gerenciar Canais do bot."
-        );
+        return interaction.editReply({
+          content: `Não foi possível adicionar esse membro. Confira se o bot tem permissão Gerenciar Threads no canal pai do ticket. Detalhe: ${error?.message || "erro desconhecido"}`,
+          components: []
+        }).catch(() => {});
       }
     }
 
@@ -3815,23 +3817,39 @@ client.on("interactionCreate", async interaction => {
 
       /* RENOMEAR TICKET */
       if (interaction.customId.startsWith("ticket_rename|")) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const ticketId = interaction.customId.split("|")[1];
         const ticket = db.tickets?.[ticketId];
-        if (!ticket || ticket.status !== "open") return deny(interaction, "❌ Este ticket não está mais aberto.");
+        if (!ticket || ticket.status !== "open") return interaction.editReply({ content: "Este ticket não está mais aberto." });
 
         const ticketGuild = interaction.guild || client.guilds.cache.get(ticket.guildId) || await client.guilds.fetch(ticket.guildId).catch(() => null);
         const ticketMember = ticketGuild ? await ticketGuild.members.fetch(interaction.user.id).catch(() => null) : null;
         const hasSupportRole = memberIsTicketResponsible(ticketMember);
-        if (!hasSupportRole) return deny(interaction, "❌ Apenas os cargos responsáveis pelos tickets podem usar esta função.");
+        if (!hasSupportRole) return interaction.editReply({ content: "Apenas os cargos responsáveis pelos tickets podem usar esta função." });
 
         const ticketChannel = ticketGuild ? await ticketGuild.channels.fetch(ticket.channelId).catch(() => null) : null;
-        if (!ticketChannel) return deny(interaction, "❌ O canal deste ticket não foi encontrado.");
+        if (!ticketChannel) return interaction.editReply({ content: "O canal deste ticket não foi encontrado." });
 
         const rawName = interaction.fields.getTextInputValue("channel_name").trim();
         const name = rawName.replace(/[^a-zA-Z0-9À-ÿ _-]/g, "").replace(/ +/g, " ").trim().slice(0, 90);
-        if (!name) return deny(interaction, "❌ Informe um nome válido para o canal.");
-        await ticketChannel.setName(name).catch(() => null);
-        return interaction.reply({ content: "", flags: MessageFlags.Ephemeral });
+        if (!name) return interaction.editReply({ content: "Informe um nome válido para o canal." });
+        try {
+          const botMember = ticketGuild.members.me || await ticketGuild.members.fetchMe();
+          if (ticketChannel.isThread?.()) {
+            if (!botMember.permissionsIn(ticketChannel.parent).has(PermissionFlagsBits.ManageThreads)) {
+              return interaction.editReply({ content: "Não consegui renomear: preciso da permissão Gerenciar Threads no canal pai deste ticket." });
+            }
+            if (ticketChannel.archived) await ticketChannel.setArchived(false, "Reabrindo para renomear ticket");
+            if (ticketChannel.locked) await ticketChannel.setLocked(false, "Desbloqueando para renomear ticket");
+          } else if (!botMember.permissionsIn(ticketChannel).has(PermissionFlagsBits.ManageChannels)) {
+            return interaction.editReply({ content: "Não consegui renomear: preciso da permissão Gerenciar Canais." });
+          }
+          await ticketChannel.setName(name, "Nome alterado pelo painel de tickets");
+          return interaction.editReply({ content: `Nome do ticket alterado para **${name}**.` });
+        } catch (error) {
+          console.error("Erro ao renomear ticket:", error);
+          return interaction.editReply({ content: `Não foi possível renomear o ticket. Confira as permissões do bot e tente novamente. Detalhe: ${error?.message || "erro desconhecido"}` }).catch(() => {});
+        }
       }
 
       /* PAINEL DE TICKETS */
@@ -4424,12 +4442,13 @@ client.on("interactionCreate", async interaction => {
 
     console.error("❌ ERRO NA INTERAÇÃO:", error);
 
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content:
-          "❌ Ocorreu um erro ao processar esta interação.",
-        flags: MessageFlags.Ephemeral
-      }).catch(() => {});
+    const userError = `Ocorreu um erro ao processar esta ação. ${error?.message ? `Detalhe: ${error.message}` : "Verifique as permissões do bot e tente novamente."}`;
+    if (interaction.deferred && !interaction.replied) {
+      await interaction.editReply({ content: userError }).catch(() => {});
+    } else if (interaction.replied) {
+      await interaction.followUp({ content: userError, flags: MessageFlags.Ephemeral }).catch(() => {});
+    } else {
+      await interaction.reply({ content: userError, flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
 });
