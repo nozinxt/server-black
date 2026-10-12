@@ -3,8 +3,7 @@
  BOT DE QUIZ EDUCATIVO DISCORD — VERSÃO COMPLETA
 ==========================================================
 
-REQUISITOS:
-  Node.js 18.17+
+REQUISS
   discord.js 14+
 
 VARIÁVEIS DE AMBIENTE:
@@ -1700,10 +1699,41 @@ client.once('clientReady', async () => {
 ======================================================== */
 
 async function processAnalysis(message, type) {
-  if (!message.guild || !message.channel?.isTextBased()) return;
+  if (!message.guild) return;
+
+  const isMobile = type === "Mobile";
+  const configuredChannelId = isMobile
+    ? db.config.ssmobChannelId
+    : db.config.ssemuChannelId;
+  const commandName = isMobile ? ".ssmob" : ".ssemu";
+
+  if (!configuredChannelId) {
+    await message.reply(
+      `❌ O canal para ${commandName} ainda não foi configurado no /config. Abra /config → Canais do sistema e selecione o canal correspondente.`
+    ).catch(() => {});
+    return;
+  }
 
   if (!db.config.analystRoleId) {
-    await message.reply("❌ O cargo de Analista ainda não foi configurado no `/config`.").catch(() => {});
+    await message.reply(
+      "❌ O cargo de Analista ainda não foi configurado no /config. Configure o cargo antes de solicitar uma análise."
+    ).catch(() => {});
+    return;
+  }
+
+  const targetChannel = await getChannel(message.guild, configuredChannelId);
+  if (!targetChannel || !targetChannel.isTextBased() || !targetChannel.send) {
+    await message.reply(
+      `❌ O canal configurado para ${commandName} não existe ou não aceita mensagens. Confira a configuração em /config.`
+    ).catch(() => {});
+    return;
+  }
+
+  const analystRole = await message.guild.roles.fetch(db.config.analystRoleId).catch(() => null);
+  if (!analystRole) {
+    await message.reply(
+      "❌ O cargo de Analista configurado não existe mais. Selecione novamente o cargo em /config."
+    ).catch(() => {});
     return;
   }
 
@@ -1714,61 +1744,51 @@ async function processAnalysis(message, type) {
     requesterId: message.author.id,
     type,
     analystId: null,
-    analystRoleId: db.config.analystRoleId,
-    channelId: message.channel.id,
+    analystRoleId: analystRole.id,
+    channelId: targetChannel.id,
     status: "pending",
     createdAt: Date.now()
   };
 
-  // A solicitação usa exatamente o canal onde o comando foi enviado.
-  // Se o canal for privado, libera o cargo de Analista para que ele consiga
-  // acessar a solicitação. Nenhum canal novo é criado.
-  try {
-    if (message.channel.permissionOverwrites?.edit) {
-      await message.channel.permissionOverwrites.edit(db.config.analystRoleId, {
-        ViewChannel: true,
-        SendMessages: true,
-        ReadMessageHistory: true
-      });
-    }
-  } catch (error) {
-    console.error("❌ Não foi possível liberar o acesso do Analista ao canal:", error);
-    await message.reply("❌ Não foi possível liberar o acesso do Analista a este canal. Verifique as permissões do bot.").catch(() => {});
-    return;
-  }
-
+  // Registra a solicitação antes de publicar o botão para que ele já tenha um ID válido.
   db.analyses[id] = analysis;
   saveDatabase();
 
-  // A solicitação fica no próprio canal em que o comando foi usado.
-  await message.channel.send({
-    content: `<@${message.author.id}> <@&${db.config.analystRoleId}>`,
-    embeds: [
-      makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
-        `📱 **Modalidade:** ${type}`,
-        `👤 **Solicitante:** <@${message.author.id}>`,
-        "",
-        "⏳ **Status:** Aguardando Analista"
-      ].join("\n"))
-    ],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`analysis_take|${id}`)
-          .setLabel("Assumir análise")
-          .setEmoji("🔎")
-          .setStyle(ButtonStyle.Success)
-      )
-    ]
-  }).catch(async error => {
-    console.error("❌ Não foi possível publicar a solicitação no canal:", error);
+  try {
+    await targetChannel.send({
+      content: `<@${message.author.id}> <@&${analystRole.id}>`,
+      allowedMentions: { users: [message.author.id], roles: [analystRole.id] },
+      embeds: [
+        makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
+          `📱 **Modalidade:** ${type}`,
+          `👤 **Solicitante:** <@${message.author.id}>`,
+          `📢 **Canal de destino:** <#${targetChannel.id}>`,
+          "",
+          "⏳ **Status:** Aguardando Analista",
+          "Um Analista com o cargo configurado pode assumir pelo botão abaixo."
+        ].join("\n"))
+      ],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`analysis_take|${id}`)
+            .setLabel("Assumir análise")
+            .setStyle(ButtonStyle.Success)
+        )
+      ]
+    });
+
+    await message.reply(
+      `✅ Solicitação de análise **${type}** enviada para <#${targetChannel.id}>.`
+    ).catch(() => {});
+  } catch (error) {
     delete db.analyses[id];
     saveDatabase();
-  });
-
-  // O comando original não precisa permanecer no canal; a solicitação acima
-  // continua no mesmo canal para o Analista acessar e assumir.
-  await message.delete().catch(() => {});
+    console.error(`❌ Erro ao enviar o painel de análise (${commandName}):`, error);
+    await message.reply(
+      "❌ Não consegui enviar o painel no canal configurado. Confira se o bot tem as permissões Ver Canal, Enviar Mensagens, Inserir Links e Usar Componentes nesse canal."
+    ).catch(() => {});
+  }
 }
 client.on("messageCreate", async message => {
   if (message.author.bot) return;
