@@ -3,7 +3,8 @@
  BOT DE QUIZ EDUCATIVO DISCORD — VERSÃO COMPLETA
 ==========================================================
 
-REQUISS
+REQUISITOS:
+  Node.js 18.17+
   discord.js 14+
 
 VARIÁVEIS DE AMBIENTE:
@@ -1737,6 +1738,21 @@ async function processAnalysis(message, type) {
     return;
   }
 
+  // Associa a solicitação à aposta ativa do tópico privado onde o comando foi usado.
+  const linkedBet = Object.values(db.bets || {}).find(
+    bet => bet.guildId === message.guild.id &&
+      bet.channelId === message.channel.id &&
+      bet.status !== "finished" &&
+      bet.status !== "cancelled"
+  );
+
+  if (!linkedBet) {
+    await message.reply(
+      "❌ Use este comando dentro do tópico privado de uma aposta ativa para que o Analista seja levado até ela."
+    ).catch(() => {});
+    return;
+  }
+
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const analysis = {
     id,
@@ -1746,6 +1762,8 @@ async function processAnalysis(message, type) {
     analystId: null,
     analystRoleId: analystRole.id,
     channelId: targetChannel.id,
+    betId: linkedBet.id,
+    betChannelId: linkedBet.channelId,
     status: "pending",
     createdAt: Date.now()
   };
@@ -1762,10 +1780,11 @@ async function processAnalysis(message, type) {
         makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
           `📱 **Modalidade:** ${type}`,
           `👤 **Solicitante:** <@${message.author.id}>`,
-          `📢 **Canal de destino:** <#${targetChannel.id}>`,
+          `📢 **Canal do painel:** <#${targetChannel.id}>`,
+          `🎮 **Aposta:** <#${linkedBet.channelId}>`,
           "",
           "⏳ **Status:** Aguardando Analista",
-          "Um Analista com o cargo configurado pode assumir pelo botão abaixo."
+          "Ao assumir, o Analista será adicionado ao tópico privado desta aposta."
         ].join("\n"))
       ],
       components: [
@@ -2996,36 +3015,61 @@ client.on("interactionCreate", async interaction => {
           return deny(interaction, "❌ O canal da análise não está disponível.");
         }
 
-        analysis.analystId = interaction.user.id;
-        analysis.status = "assigned";
+        const bet = analysis.betId ? db.bets?.[analysis.betId] : null;
+        const betThread = bet?.channelId
+          ? await interaction.guild.channels.fetch(bet.channelId).catch(() => null)
+          : null;
+
+        if (!bet || !betThread || betThread.type !== ChannelType.PrivateThread || bet.status === "finished" || bet.status === "cancelled") {
+          return deny(interaction, "❌ O tópico privado desta aposta não está disponível. Peça para enviar uma nova solicitação dentro do tópico correto.");
+        }
 
         try {
-          await grantChannelAccess(analysisChannel, analysis.analystId, {
+          // O bot precisa de Gerenciar Threads para adicionar o Analista à thread privada.
+          await betThread.members.add(interaction.user.id);
+          await grantChannelAccess(analysisChannel, interaction.user.id, {
             ViewChannel: true,
             SendMessages: true,
             ReadMessageHistory: true,
             ManageMessages: true
           });
         } catch (error) {
-          analysis.analystId = null;
-          analysis.status = "pending";
-          console.error("❌ Não foi possível garantir acesso ao Analista:", error);
-          return deny(interaction, "❌ Não foi possível liberar o acesso do Analista ao canal da análise.");
+          console.error("❌ Não foi possível adicionar o Analista ao tópico privado da aposta:", error);
+          return deny(interaction, "❌ Não consegui adicionar você ao tópico privado da aposta. Verifique se o bot tem a permissão Gerenciar Threads.");
         }
 
+        analysis.analystId = interaction.user.id;
+        analysis.status = "assigned";
+        analysis.assignedAt = Date.now();
         saveDatabase();
 
-        // Atualiza a própria mensagem da solicitação: nenhum novo embed ou mensagem.
+        await betThread.send({
+          content: `<@${interaction.user.id}>`,
+          allowedMentions: { users: [interaction.user.id] },
+          embeds: [
+            makeEmbed("🔎 ANALISTA ASSUMIU A ANÁLISE", [
+              `📱 **Modalidade:** ${analysis.type}`,
+              `👤 **Analista:** <@${interaction.user.id}>`,
+              `🎮 **Aposta:** ${bet.format} ${bet.mode || ""}`.trim(),
+              "",
+              "O Analista foi adicionado a este tópico privado para atender a solicitação."
+            ].join("\n"))
+          ]
+        }).catch(error => {
+          console.error("❌ Não foi possível avisar no tópico privado da aposta:", error);
+        });
+
+        // Atualiza o painel original e deixa o vínculo com a aposta visível.
         return interaction.update({
-          content: `🤖 **O bot adicionou <@${interaction.user.id}> ao canal para assumir esta análise.**`,
+          content: `🤖 **<@${interaction.user.id}> assumiu a análise e foi adicionado ao tópico privado da aposta:** <#${betThread.id}>.`,
           embeds: [
             makeEmbed("🔎 SOLICITAÇÃO DE ANÁLISE", [
               `📱 **Modalidade:** ${analysis.type}`,
               `👤 **Solicitante:** <@${analysis.requesterId}>`,
               `🔎 **Analista responsável:** <@${interaction.user.id}>`,
+              `🎮 **Tópico privado da aposta:** <#${betThread.id}>`,
               "",
-              "🟢 **Status:** Em atendimento",
-              `📍 **Canal:** ${analysisChannel}`
+              "🟢 **Status:** Em atendimento"
             ].join("\n"))
           ],
           components: []
