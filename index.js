@@ -90,10 +90,25 @@ if (!CLIENT_ID) {
    BANCO LOCAL
 ======================================================== */
 
-const DATA_DIR = path.join(__dirname, "data");
-const DATA_FILE = path.join(DATA_DIR, "database.json");
-const DATA_BACKUP_FILE = path.join(DATA_DIR, "database.backup.json");
-const DATA_TMP_FILE = path.join(DATA_DIR, "database.json.tmp");
+// Use DATABASE_PATH (arquivo completo) ou DATA_DIR (pasta persistente) na hospedagem.
+// Por padrão, guarda os dados na pasta data do projeto.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(__dirname, "data");
+const DATA_FILE = process.env.DATABASE_PATH
+  ? path.resolve(process.env.DATABASE_PATH)
+  : path.join(DATA_DIR, "database.json");
+const DATA_BACKUP_FILE = `${DATA_FILE}.backup.json`;
+const DATA_TMP_FILE = `${DATA_FILE}.tmp`;
+const LEGACY_DATABASE_FILES = [
+  path.join(__dirname, "database.json"),
+  path.join(process.cwd(), "database.json"),
+  path.join(process.cwd(), "data", "database.json"),
+  path.join(__dirname, "db.json"),
+  path.join(process.cwd(), "db.json")
+].filter((file, index, all) => file !== DATA_FILE && all.indexOf(file) === index);
+
+fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -179,12 +194,16 @@ function loadDatabase() {
   };
 
   const primary = readValid(DATA_FILE);
-  if (primary) return primary;
+  if (primary) {
+    console.log(`✅ Banco carregado: ${DATA_FILE}`);
+    return primary;
+  }
 
   const backup = readValid(DATA_BACKUP_FILE);
   if (backup) {
-    console.warn("⚠️ database.json estava inválido. Restaurando o backup automático.");
+    console.warn("⚠️ Banco principal ausente/inválido. Restaurando o backup automático.");
     try {
+      fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
       fs.copyFileSync(DATA_BACKUP_FILE, DATA_FILE);
     } catch (error) {
       console.error("❌ Não foi possível restaurar o backup:", error);
@@ -192,11 +211,31 @@ function loadDatabase() {
     return backup;
   }
 
-  console.warn("⚠️ Nenhum banco válido encontrado. Criando um banco novo.");
+  // Procura bancos antigos antes de criar um banco vazio, para evitar reset após atualizar o código.
+  for (const legacyFile of LEGACY_DATABASE_FILES) {
+    const legacy = readValid(legacyFile);
+    if (!legacy) continue;
+    console.warn(`♻️ Banco antigo encontrado em ${legacyFile}. Migrando para ${DATA_FILE}.`);
+    try {
+      fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+      fs.copyFileSync(legacyFile, DATA_FILE);
+    } catch (error) {
+      console.error("❌ Não foi possível copiar o banco antigo:", error);
+    }
+    return legacy;
+  }
+
+  console.error(`⚠️ Nenhum banco existente foi encontrado. Caminho esperado: ${DATA_FILE}`);
+  console.error("⚠️ Para manter as configurações após reiniciar/atualizar, configure DATA_DIR ou DATABASE_PATH para um disco/volume persistente da hospedagem.");
   const fresh = createDefaultDatabase();
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(fresh, null, 2), "utf8");
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(fresh, null, 2), { encoding: "utf8", flag: "wx" });
   } catch (error) {
+    if (error.code === "EEXIST") {
+      const created = readValid(DATA_FILE);
+      if (created) return created;
+    }
     console.error("❌ Não foi possível criar o banco:", error);
   }
   return fresh;
@@ -1018,7 +1057,7 @@ async function refreshStreamerQueueMessage(queue, guild) {
   const cacheKey = `${guild.id}:${queue.messageId}`;
   if (streamerQueueRenderCache.get(cacheKey) === signature) return;
 
-  const channel = await guild.channels.fetch(queue.channelId).catch(() => null);
+  const channel = guild.channels.cache.get(queue.channelId) || await guild.channels.fetch(queue.channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
   const message = await channel.messages.fetch(queue.messageId).catch(() => null);
   if (!message) {
@@ -4538,7 +4577,7 @@ async function refreshQueueMessage(queue, guild) {
   const cacheKey = `${guild.id}:${queue.messageId}`;
   if (queueRenderCache.get(cacheKey) === signature) return;
 
-  const channel = await guild.channels.fetch(queue.channelId).catch(() => null);
+  const channel = guild.channels.cache.get(queue.channelId) || await guild.channels.fetch(queue.channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
   const message = await channel.messages.fetch(queue.messageId).catch(() => null);
   if (!message) {
@@ -4558,47 +4597,65 @@ async function keepOpenTicketsAlive(guild) {
     ticket => ticket.guildId === guild.id && ticket.status === "open"
   );
 
-  for (const ticket of openTickets) {
-    const channel = await guild.channels.fetch(ticket.channelId).catch(() => null);
-    if (!channel) continue;
+  // O cache evita consultas desnecessárias à API do Discord.
+  await runWithConcurrency(openTickets, 4, async ticket => {
+    const channel = guild.channels.cache.get(ticket.channelId)
+      || await guild.channels.fetch(ticket.channelId).catch(() => null);
+    if (!channel) return;
 
     if (channel.isThread?.() && channel.archived) {
       await channel.setArchived(false, "Manter ticket aberto até ser finalizado").catch(() => {});
     }
-
     if (channel.isThread?.() && channel.locked) {
       await channel.setLocked(false, "Reativar ticket aberto").catch(() => {});
     }
-  }
+  });
+}
+
+// Executa tarefas independentes em paralelo, limitando a concorrência para
+// acelerar a manutenção sem disparar centenas de requisições de uma vez.
+async function runWithConcurrency(items, limit, worker) {
+  let nextIndex = 0;
+  const count = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: count }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      try {
+        await worker(items[index], index);
+      } catch (error) {
+        console.error("⚠️ Falha em tarefa de manutenção:", error?.message || error);
+      }
+    }
+  }));
 }
 
 let maintenanceRunning = false;
 
 setInterval(async () => {
   if (maintenanceRunning) return;
-
   maintenanceRunning = true;
 
   try {
+    const tasks = [];
     for (const guild of client.guilds.cache.values()) {
-      for (const queue of Object.values(db.queues)) {
-        if (!queue.channelId) continue;
-        if (queue.guildId && queue.guildId !== guild.id) continue;
-
-        await refreshQueueMessage(queue, guild);
+      for (const queue of Object.values(db.queues || {})) {
+        if (queue.channelId && (!queue.guildId || queue.guildId === guild.id)) {
+          tasks.push(() => refreshQueueMessage(queue, guild));
+        }
       }
-
-      /* A fila de Mediadores só é publicada/atualizada quando configurada pelo ADM. */
-
-      await keepOpenTicketsAlive(guild);
-
+      for (const ticket of Object.values(db.tickets || {})) {
+        if (ticket.guildId === guild.id && ticket.status === "open") {
+          // Ticket maintenance is batched separately below.
+        }
+      }
       for (const queue of Object.values(db.streamerQueues || {})) {
-        if (!queue.channelId) continue;
-        if (queue.guildId && queue.guildId !== guild.id) continue;
-
-        await refreshStreamerQueueMessage(queue, guild);
+        if (queue.channelId && (!queue.guildId || queue.guildId === guild.id)) {
+          tasks.push(() => refreshStreamerQueueMessage(queue, guild));
+        }
       }
+      tasks.push(() => keepOpenTicketsAlive(guild));
     }
+    await runWithConcurrency(tasks, 4, task => task());
   } catch (error) {
     console.error("❌ Erro na manutenção:", error);
   } finally {
