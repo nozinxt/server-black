@@ -1212,10 +1212,10 @@ async function finishStreamerMatch(message, match) {
 ======================================================== */
 
 const TICKET_TYPES = {
-  support: { label: "Suporte", emoji: "", channelKey: "ticketSupportChannelId" },
-  refund: { label: "Reembolso", emoji: "", channelKey: "ticketRefundChannelId" },
-  vacancies: { label: "Vagas", emoji: "", channelKey: "ticketVacanciesChannelId" },
-  event: { label: "Receber Evento", emoji: "", channelKey: "ticketEventChannelId" }
+  support: { label: "Suporte", emoji: { id: "15597319993952921218", name: "suporte" }, channelKey: "ticketSupportChannelId" },
+  refund: { label: "Reembolso", emoji: { id: "1559731964599074926", name: "reembolso" }, channelKey: "ticketRefundChannelId" },
+  vacancies: { label: "Vagas", emoji: { id: "1559731938019770458", name: "vagas" }, channelKey: "ticketVacanciesChannelId" },
+  event: { label: "Receber Evento", emoji: { id: "1559731895154249789", name: "receber_evento" }, channelKey: "ticketEventChannelId" }
 };
 
 function ticketCreationPanelComponents() {
@@ -1225,10 +1225,10 @@ function ticketCreationPanelComponents() {
         .setCustomId("ticket_create_menu")
         .setPlaceholder("Selecione o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", description: "Atendimento geral e suporte." },
-          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso." },
-          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas." },
-          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos." }
+          { label: "Suporte", value: "support", description: "Atendimento geral e suporte.", emoji: { id: "15597319993952921218", name: "suporte" } },
+          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso.", emoji: { id: "1559731964599074926", name: "reembolso" } },
+          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas.", emoji: { id: "1559731938019770458", name: "vagas" } },
+          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos.", emoji: { id: "1559731895154249789", name: "receber_evento" } }
         ])
     )
   ];
@@ -1262,6 +1262,7 @@ function ticketCreationPanelEmbed() {
 // Prefix commands do Discord não possuem resposta efêmera por mensagem.
 // Por isso o `.aux` publica o painel no próprio ticket e as interações são
 // autorizadas individualmente: somente cargos responsáveis podem utilizá-lo.
+// Painel pequeno dentro de cada ticket: manter os itens sem emojis, conforme solicitado.
 function ticketPanelComponents(ticketId, claimedBy = null) {
   return [
     new ActionRowBuilder().addComponents(
