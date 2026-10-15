@@ -18,6 +18,7 @@ COMANDOS:
   /painel cadastro
   /fila
   /atualizar fila
+  /apagar filas
   /embeds
   /criar ticket
   /fila streamer
@@ -746,17 +747,17 @@ function queueComponents(queue) {
   if (["2x2", "3x3"].includes(queue.format) && queue.modality !== "misto") {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Entrar na fila").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -764,8 +765,8 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && queue.format === "2x2") {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -773,9 +774,9 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && ["3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setStyle(ButtonStyle.Primary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setStyle(ButtonStyle.Primary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -783,8 +784,8 @@ function queueComponents(queue) {
   if (["2x2", "3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Entrar na fila").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -795,8 +796,8 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
-      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito)
+      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito)
     )
   ];
 }
@@ -833,8 +834,8 @@ function mediatorQueueComponents() {
 function safeMediatorQueueComponents() {
   return [
     new ActionRowBuilder().addComponents(
-      addCustomEmoji(new ButtonBuilder().setCustomId("mediator_join").setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-      addCustomEmoji(new ButtonBuilder().setCustomId("mediator_leave").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+      addCustomEmoji(new ButtonBuilder().setCustomId("mediator_join").setLabel("Entrar na fila").setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+      addCustomEmoji(new ButtonBuilder().setCustomId("mediator_leave").setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
     )
   ];
 }
@@ -1161,20 +1162,19 @@ function streamerQueueComponents(queue) {
   if (queue.disabled) {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_activate|${queue.id}`).setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_activate|${queue.id}`).setLabel("Ativar fila").setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar)
       )
     ];
   }
 
   return [
     new ActionRowBuilder().addComponents(
-      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_join|${queue.id}`).setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair),
-      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_deactivate|${queue.id}`).setStyle(ButtonStyle.Secondary), "portafechada", QUEUE_EMOJI_IDS.sair)
+      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_join|${queue.id}`).setLabel("Entrar na fila").setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_deactivate|${queue.id}`).setLabel("Desativar fila").setStyle(ButtonStyle.Secondary), "portafechada", QUEUE_EMOJI_IDS.sair)
     )
   ];
-}
-// Evita chamadas repetidas à API do Discord quando a fila não mudou.
+}// Evita chamadas repetidas à API do Discord quando a fila não mudou.
 const streamerQueueRenderCache = new Map();
 
 async function refreshStreamerQueueMessage(queue, guild) {
@@ -1890,6 +1890,129 @@ function configButtons() {
    COMANDOS SLASH
 ======================================================== */
 
+function isQueuePublicationMessage(message, botUserId) {
+  if (!message || message.author?.id !== botUserId) return false;
+
+  for (const row of message.components || []) {
+    for (const component of row.components || []) {
+      const customId = component.customId || component.custom_id || "";
+      if (/^(?:queue_join|queue_leave)\|/.test(customId)) return true;
+      if (/^streamer_(?:join|leave|activate|deactivate)\|/.test(customId)) return true;
+      if (customId === "mediator_join" || customId === "mediator_leave") return true;
+    }
+  }
+
+  const title = String(message.embeds?.[0]?.title || "").trim();
+  const description = String(message.embeds?.[0]?.description || "");
+  const hasQueueFields = /valorfila|Valor da aposta/i.test(description)
+    && /quantidade|Jogadores/i.test(description);
+  return /^(?:🎮\s*)?\d+[vx]\d+\s+(?:Mobile|Emulador|Misto)(?:\s*\|\s*R\$\s*[\d,.]+)?$/i.test(title)
+    || /^(?:🎮\s*)?FILA\s+\d+[vx]\d+$/i.test(title)
+    || /^🎥\s*FILA DO\b/i.test(title)
+    || /^FILA MEDIADORES$/i.test(title)
+    || (hasQueueFields && /\b[1-4][xv][1-4]\b/i.test(title));
+}
+
+async function deleteAllQueuePublications(guild) {
+  let scannedMessages = 0;
+  let deletedMessages = 0;
+  let failedDeletes = 0;
+  let inaccessibleChannels = 0;
+  const visitedMessages = new Set();
+  const deletedIds = new Set();
+
+  const deleteIfQueue = async (message) => {
+    if (!isQueuePublicationMessage(message, client.user?.id)) return;
+    if (deletedIds.has(message.id)) return;
+    deletedIds.add(message.id);
+    try {
+      await message.delete();
+      deletedMessages++;
+    } catch (error) {
+      if (error?.code !== 10008) {
+        failedDeletes++;
+        console.warn("Não foi possível apagar uma publicação de fila:", error?.message || error);
+      }
+    }
+  };
+
+  const tracked = [];
+  const addTracked = (queue) => {
+    if (!queue || (queue.guildId && queue.guildId !== guild.id)) return;
+    if (Array.isArray(queue.publications)) tracked.push(...queue.publications);
+    if (queue.channelId && queue.messageId) tracked.push({ channelId: queue.channelId, messageId: queue.messageId });
+  };
+  for (const queue of Object.values(db.queues || {})) addTracked(queue);
+  for (const queue of Object.values(db.streamerQueues || {})) addTracked(queue);
+  if (db.config.mediatorQueueChannelId && db.config.mediatorQueueMessageId) {
+    tracked.push({ channelId: db.config.mediatorQueueChannelId, messageId: db.config.mediatorQueueMessageId });
+  }
+
+  await runWithConcurrency(tracked, 3, async ref => {
+    if (!ref?.channelId || !ref?.messageId) return;
+    const key = `${ref.channelId}:${ref.messageId}`;
+    if (visitedMessages.has(key)) return;
+    visitedMessages.add(key);
+    const channel = guild.channels.cache.get(ref.channelId)
+      || await guild.channels.fetch(ref.channelId).catch(() => null);
+    if (!channel?.messages?.fetch) return;
+    const message = await channel.messages.fetch(ref.messageId).catch(() => null);
+    if (!message) return;
+    scannedMessages++;
+    await deleteIfQueue(message);
+  });
+
+  const channelsById = new Map(guild.channels.cache);
+  const textParents = Array.from(channelsById.values())
+    .filter(channel => channel.threads?.fetchActive && channel.threads?.fetchArchived);
+  await runWithConcurrency(textParents, 3, async channel => {
+    const active = await channel.threads.fetchActive().catch(() => null);
+    for (const thread of active?.threads?.values?.() || []) channelsById.set(thread.id, thread);
+
+    let before;
+    while (true) {
+      const archived = await channel.threads.fetchArchived({
+        type: "public",
+        limit: 100,
+        ...(before ? { before } : {})
+      }).catch(() => null);
+      if (!archived?.threads?.size) break;
+      for (const thread of archived.threads.values()) channelsById.set(thread.id, thread);
+      if (!archived.hasMore) break;
+      const oldest = archived.threads.last();
+      if (!oldest?.archiveTimestamp || oldest.archiveTimestamp === before) break;
+      before = oldest.archiveTimestamp;
+    }
+  });
+
+  const channels = Array.from(channelsById.values())
+    .filter(channel => channel.isTextBased?.() && channel.messages?.fetch);
+  await runWithConcurrency(channels, 3, async channel => {
+    let before;
+    while (true) {
+      const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+      if (!batch) {
+        inaccessibleChannels++;
+        return;
+      }
+      if (!batch.size) return;
+
+      scannedMessages += batch.size;
+      for (const message of batch.values()) {
+        const key = `${channel.id}:${message.id}`;
+        if (visitedMessages.has(key)) continue;
+        visitedMessages.add(key);
+        await deleteIfQueue(message);
+      }
+
+      const oldest = batch.last();
+      if (batch.size < 100 || !oldest || oldest.id === before) return;
+      before = oldest.id;
+    }
+  });
+
+  return { scannedMessages, deletedMessages, failedDeletes, inaccessibleChannels };
+}
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
@@ -1919,6 +2042,15 @@ async function registerCommands() {
         subcommand
           .setName("fila")
           .setDescription("Atualiza/repara as filas existentes sem apagar os dados.")),
+
+    new SlashCommandBuilder()
+      .setName("apagar")
+      .setDescription("Apaga as filas publicadas no servidor.")
+      .setDefaultMemberPermissions(null)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName("filas")
+          .setDescription("Localiza e apaga as publicações de filas do bot no servidor.")),
 
     new SlashCommandBuilder()
       .setName("fila-streamer")
@@ -2463,6 +2595,29 @@ client.on("interactionCreate", async interaction => {
           components: configButtons(),
           flags: MessageFlags.Ephemeral
         });
+      }
+
+      /* /apagar filas — remove as publicações de fila deste servidor */
+      if (interaction.commandName === "apagar" && interaction.options.getSubcommand() === "filas") {
+        if (!interaction.guild) {
+          return deny(interaction, "Este comando só pode ser usado dentro de um servidor.");
+        }
+        if (!(await requireAdmin(interaction))) return;
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        try {
+          const result = await deleteAllQueuePublications(interaction.guild);
+          return interaction.editReply([
+            "Busca concluída no servidor.",
+            `Mensagens analisadas: **${result.scannedMessages}**`,
+            `Publicações de fila apagadas: **${result.deletedMessages}**`,
+            `Falhas ao apagar: **${result.failedDeletes}**`,
+            `Canais sem acesso: **${result.inaccessibleChannels}**`,
+            "As configurações e os dados do banco foram mantidos."
+          ].join("\n"));
+        } catch (error) {
+          console.error("❌ Erro no comando /apagar filas:", error);
+          return interaction.editReply("Não foi possível terminar a busca pelas filas. Verifique as permissões do bot nos canais.");
+        }
       }
 
       /* /atualizar fila — encontra, repara e republica filas sem apagar dados */
