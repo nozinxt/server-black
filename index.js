@@ -746,17 +746,17 @@ function queueComponents(queue) {
   if (["2x2", "3x3"].includes(queue.format) && queue.modality !== "misto") {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId("queue_join|" + queue.id + "|normal").setLabel("〔▯→〕 Entrar na fila").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId("queue_leave|" + queue.id).setLabel("〔←▯〕 Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -764,8 +764,8 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && queue.format === "2x2") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -773,9 +773,9 @@ function queueComponents(queue) {
   if (queue.modality === "misto" && ["3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setLabel("1Emu").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setLabel("2Emu").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|1emu`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|2emu`).setStyle(ButtonStyle.Primary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -783,8 +783,8 @@ function queueComponents(queue) {
   if (["2x2", "3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("〔▯→〕 Entrar na fila").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
-        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔←▯〕 Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -795,12 +795,11 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
-      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito)
+      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito)
     )
   ];
 }
-
 async function mediatorQueueEmbed(guild) {
   const lines = ["**FILA MEDIADORES**", ""];
 
@@ -834,8 +833,8 @@ function mediatorQueueComponents() {
 function safeMediatorQueueComponents() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("mediator_join").setLabel("Entrar").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("mediator_leave").setLabel("Sair").setStyle(ButtonStyle.Danger)
+      addCustomEmoji(new ButtonBuilder().setCustomId("mediator_join").setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+      addCustomEmoji(new ButtonBuilder().setCustomId("mediator_leave").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
     )
   ];
 }
@@ -1162,36 +1161,19 @@ function streamerQueueComponents(queue) {
   if (queue.disabled) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`streamer_activate|${queue.id}`)
-          .setLabel("Ativar fila")
-          .setEmoji("🟢")
-          .setStyle(ButtonStyle.Success)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_activate|${queue.id}`).setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar)
       )
     ];
   }
 
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`streamer_join|${queue.id}`)
-        .setLabel("Entrar na fila")
-        .setEmoji("🎮")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`streamer_leave|${queue.id}`)
-        .setLabel("Sair da fila")
-        .setEmoji("🚪")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`streamer_deactivate|${queue.id}`)
-        .setLabel("Desativar fila")
-        .setEmoji("⛔")
-        .setStyle(ButtonStyle.Secondary)
+      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_join|${queue.id}`).setStyle(ButtonStyle.Success), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_leave|${queue.id}`).setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`streamer_deactivate|${queue.id}`).setStyle(ButtonStyle.Secondary), "portafechada", QUEUE_EMOJI_IDS.sair)
     )
   ];
 }
-
 // Evita chamadas repetidas à API do Discord quando a fila não mudou.
 const streamerQueueRenderCache = new Map();
 
