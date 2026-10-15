@@ -546,6 +546,107 @@ function getQueue(format, modality, value, mode) {
   return db.queues[id];
 }
 
+async function publishQueueDestinations(guild, destinations) {
+  const values = ALLOWED_VALUES.slice().sort((a, b) => b - a);
+  let published = 0;
+
+  for (const destination of destinations) {
+    const channel = await getChannel(guild, destination.channelId);
+    if (!channel || !channel.isTextBased?.() || typeof channel.send !== "function") {
+      throw new Error("Um dos canais selecionados é inválido ou não permite enviar mensagens.");
+    }
+
+    const modes = destination.format === "1x1" ? ["choice"] : ["normal"];
+    for (const value of values) {
+      for (const mode of modes) {
+        const queue = getQueue(destination.format, destination.modality, value, mode);
+        queue.guildId = guild.id;
+        queue.publications = Array.isArray(queue.publications) ? queue.publications : [];
+        let publication = queue.publications.find(item => item.channelId === channel.id);
+        let message = publication?.messageId
+          ? await channel.messages.fetch(publication.messageId).catch(() => null)
+          : null;
+        const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
+
+        if (message) {
+          await message.edit(payload);
+        } else {
+          message = await channel.send(payload);
+          published++;
+        }
+        if (!publication) {
+          publication = { channelId: channel.id, messageId: message.id };
+          queue.publications.push(publication);
+        } else {
+          publication.messageId = message.id;
+        }
+
+        // Mantém os campos antigos para compatibilidade com versões anteriores.
+        if (!queue.messageId) {
+          queue.messageId = message.id;
+          queue.channelId = channel.id;
+          queue.parentChannelId = channel.id;
+          queue.threadId = null;
+        }
+      }
+    }
+  }
+  return { values, published };
+}
+
+async function tryPublishFilaSetup(interaction, setup) {
+  if (!setup.slots.every(item => item.format && item.modality && item.channelId)) return;
+  if (new Set(setup.slots.map(item => item.channelId)).size !== 4) {
+    return interaction.followUp({
+      content: "❌ Os quatro destinos precisam usar canais diferentes. Altere o canal repetido em um dos cartões.",
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  try {
+    const result = await publishQueueDestinations(interaction.guild, setup.slots);
+    saveDatabase();
+    filaSetup.delete(interaction.user.id);
+    return interaction.followUp({
+      content: [
+        "✅ **FILAS PUBLICADAS NOS QUATRO DESTINOS!**",
+        ...setup.slots.map((item, index) => `**${index + 1}.** ${item.format} · ${modalityName(item.modality)} · <#${item.channelId}>`),
+        `Filas novas publicadas: **${result.published}**. As que já existiam foram atualizadas.`
+      ].join("\n"),
+      flags: MessageFlags.Ephemeral
+    });
+  } catch (error) {
+    console.error("Erro ao publicar filas nos destinos selecionados:", error);
+    return interaction.followUp({
+      content: "❌ Não foi possível publicar as filas. Verifique as permissões nos quatro canais. Detalhe: " + (error?.message || "erro desconhecido"),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+}
+
+function queueSetupSlotComponents(slotIndex) {
+  const suffix = "_" + (slotIndex + 1);
+  return [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("fila_slot_format" + suffix)
+        .setPlaceholder("1. Escolha o formato")
+        .addOptions(FORMATS.map(format => ({ label: format, value: format })))
+    ),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("fila_slot_modality" + suffix)
+        .setPlaceholder("2. Escolha a modalidade")
+        .addOptions(MODALITIES.map(modality => ({ label: modalityName(modality), value: modality })))
+    ),
+    new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder()
+        .setCustomId("fila_slot_channel" + suffix)
+        .setPlaceholder("3. Escolha o canal de publicação")
+        .setChannelTypes(ChannelType.GuildText)
+    )
+  ];
+}
+
 async function playerSelectOptions(guild, players, emoji) {
   return Promise.all(players.map(async (id) => {
     let member = guild.members.cache.get(id);
@@ -602,17 +703,17 @@ function queueComponents(queue) {
   if (["2x2", "3x3"].includes(queue.format) && queue.modality !== "misto") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("queue_join|" + queue.id + "|normal").setLabel("Normal").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("queue_leave|" + queue.id).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("queue_join|" + queue.id + "|normal").setLabel("〔▯〕 Entrar na fila").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("queue_leave|" + queue.id).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
   }
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("◦ Gelo Normal").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("◦ Gelo Infinito").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("〔❄〕 Entrar na fila · Gelo Normal").setEmoji("❄️").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("〔❄〕 Entrar na fila · Gelo Infinito").setEmoji("❄️").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -639,9 +740,8 @@ function queueComponents(queue) {
   if (["2x2", "3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("Full UMP / XM8").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("〔▯〕 Entrar na fila").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -652,8 +752,8 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("◦ Gelo Normal").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("◦ Gelo Infinito").setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("〔❄〕 Entrar na fila · Gelo Normal").setEmoji("❄️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("〔❄〕 Entrar na fila · Gelo Infinito").setEmoji("❄️").setStyle(ButtonStyle.Primary)
     )
   ];
 }
@@ -1231,10 +1331,10 @@ function ticketCreationPanelComponents() {
         .setCustomId("ticket_create_menu")
         .setPlaceholder("Selecione o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", description: "Atendimento geral e suporte.", emoji: { name: "suporte", id: "1560359877837197465" } },
-          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso.", emoji: { name: "reembolso", id: "1560359834849648740" } },
-          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas.", emoji: { name: "vagas", id: "1560359804348796988" } },
-          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos.", emoji: { name: "receber_evento", id: "1560359770840375346" } }
+          { label: "Suporte", value: "support", description: "Atendimento geral e suporte. <:suporte:1560359877837197465>" },
+          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso. <:reembolso:1560359834849648740>" },
+          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas. <:vagas:1560359804348796988>" },
+          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos. <:receber_evento:1560359770840375346>" }
         ])
     )
   ];
@@ -2232,133 +2332,197 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      /* /atualizar fila — sincroniza todas as filas registradas e recupera mensagens faltantes */
+      /* /atualizar fila — encontra, repara e republica filas sem apagar dados */
       if (interaction.commandName === "atualizar" && interaction.options.getSubcommand() === "fila") {
         if (!(await requireAdmin(interaction))) return;
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         let updated = 0;
         let recreated = 0;
         let skipped = 0;
+        const queuesById = new Map();
+        const messagesByQueueId = new Map();
+        const queuesByMessageId = new Map();
 
-        const queues = Object.values(db.queues || {}).filter(queue =>
-          queue && (!queue.guildId || queue.guildId === interaction.guildId)
-        );
-        const channelGroups = new Map();
-
-        for (const queue of queues) {
-          const channelId = queue.channelId || queue.threadId || queue.parentChannelId
-            || (queue.modality === "mobile" ? db.config.ssmobChannelId
-              : queue.modality === "emulador" ? db.config.ssemuChannelId : null);
-          if (!channelId) { skipped++; continue; }
-          queue.channelId = channelId;
-          if (!channelGroups.has(channelId)) channelGroups.set(channelId, []);
-          channelGroups.get(channelId).push(queue);
+        for (const [storedId, storedQueue] of Object.entries(db.queues || {})) {
+          if (!storedQueue || (storedQueue.guildId && storedQueue.guildId !== interaction.guildId)) continue;
+          storedQueue.id = storedQueue.id || storedId;
+          queuesById.set(storedQueue.id, storedQueue);
+          if (storedQueue.messageId) queuesByMessageId.set(storedQueue.messageId, storedQueue);
         }
 
-        const groups = Array.from(channelGroups, ([channelId, items]) => ({ channelId, queues: items }));
-        await runWithConcurrency(groups, 3, async group => {
-          let channel = interaction.guild.channels.cache.get(group.channelId)
-            || await interaction.guild.channels.fetch(group.channelId).catch(() => null);
-          if (!channel || !channel.isTextBased?.() || !channel.messages) {
-            for (const queue of group.queues) {
+        const parseQueueKey = rawId => {
+          const parts = String(rawId || "").split(":");
+          if (parts.length < 4) return null;
+          const format = parts[0];
+          const modality = parts[1];
+          const value = Number(parts[2]);
+          const mode = parts.slice(3).join(":");
+          if (!FORMATS.includes(format) || !MODALITIES.includes(modality) || !Number.isFinite(value)) return null;
+          return { id: String(rawId), format, modality, value, mode: mode || (format === "1x1" ? "choice" : "normal") };
+        };
+
+        const recoverFromMessage = (message, channel, rawId = null) => {
+          let queue = rawId ? queuesById.get(rawId) : null;
+          if (!queue && message.id) queue = queuesByMessageId.get(message.id) || null;
+          const embed = message.embeds?.[0];
+          const title = embed?.title || "";
+          const description = embed?.description || "";
+          let parsed = rawId ? parseQueueKey(rawId) : null;
+          if (!parsed && !queue) {
+            const titleMatch = title.match(/^(?:🎮\s*)?(\d+[vx]\d+)\s+(Mobile|Emulador|Misto)(?:\s*\|\s*R\$\s*([\d,.]+))?$/i);
+            if (titleMatch) {
+              const format = titleMatch[1].toLowerCase().replace("v", "x");
+              const modality = titleMatch[2].toLowerCase();
+              const amount = titleMatch[3] || (description.match(/R\$\s*([\d,.]+)/)?.[1]);
+              const value = amount ? Number(amount.replace(",", ".")) : NaN;
+              if (Number.isFinite(value)) parsed = {
+                id: queueId(format, modality, value, format === "1x1" ? "choice" : "normal"),
+                format, modality, value, mode: format === "1x1" ? "choice" : "normal"
+              };
+            }
+          }
+
+          if (!queue && parsed) {
+            const mentions = Array.from(description.matchAll(/<@!?(\d+)>/g));
+            const players = [...new Set(mentions.map(match => match[1]))];
+            const playerModes = {};
+            for (const line of description.split(/\r?\n/)) {
+              const mention = line.match(/<@!?(\d+)>/);
+              if (!mention) continue;
+              if (line.includes("Gelo Normal")) playerModes[mention[1]] = "gelo_normal";
+              else if (line.includes("Gelo Infinito")) playerModes[mention[1]] = "gelo_infinito";
+              else if (line.includes("Full UMP / XM8")) playerModes[mention[1]] = "full_ump_xm8";
+              else if (line.includes("Normal")) playerModes[mention[1]] = "normal";
+              else if (line.includes("1Emu")) playerModes[mention[1]] = "1emu";
+              else if (line.includes("2Emu")) playerModes[mention[1]] = "2emu";
+            }
+            queue = { ...parsed, players, playerModes, messageId: message.id, channelId: channel.id, parentChannelId: channel.parentId || channel.id, threadId: channel.isThread?.() ? channel.id : null, guildId: interaction.guildId };
+            queuesById.set(queue.id, queue);
+          }
+
+          if (!queue) return null;
+          queue.channelId = channel.id;
+          queue.parentChannelId = channel.parentId || channel.id;
+          queue.threadId = channel.isThread?.() ? channel.id : null;
+          queue.guildId = interaction.guildId;
+          if (!messagesByQueueId.has(queue.id)) messagesByQueueId.set(queue.id, []);
+          const candidates = messagesByQueueId.get(queue.id);
+          if (!candidates.some(item => item.id === message.id)) candidates.push(message);
+          if (!queue.messageId) queue.messageId = message.id;
+          return queue;
+        };
+
+        const channels = Array.from(interaction.guild.channels.cache.values())
+          .filter(channel => channel.isTextBased?.() && channel.messages?.fetch);
+        await runWithConcurrency(channels, 4, async channel => {
+          const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+          if (!recent) return;
+          for (const message of recent.values()) {
+            if (message.author?.id !== client.user?.id) continue;
+            let rawId = null;
+            for (const row of message.components || []) {
+              for (const component of row.components || []) {
+                const customId = component.customId || component.custom_id || "";
+                if (customId.startsWith("queue_join|") || customId.startsWith("queue_leave|")) {
+                  rawId = customId.split("|")[1] || null;
+                  if (rawId) break;
+                }
+              }
+              if (rawId) break;
+            }
+            recoverFromMessage(message, channel, rawId);
+          }
+        });
+
+        const queues = Array.from(queuesById.values());
+        await runWithConcurrency(queues, 6, async queue => {
+          const matches = messagesByQueueId.get(queue.id) || [];
+          const destinationIds = [...new Set([queue.channelId, queue.threadId, queue.parentChannelId,
+            queue.modality === "mobile" ? db.config.ssmobChannelId : null,
+            queue.modality === "emulador" ? db.config.ssemuChannelId : null,
+            queue.modality === "misto" ? db.config.betChannelId : null].filter(Boolean))];
+          let channel = null;
+          for (const channelId of destinationIds) {
+            channel = interaction.guild.channels.cache.get(channelId)
+              || await interaction.guild.channels.fetch(channelId).catch(() => null);
+            if (channel?.isTextBased?.() && channel.messages) break;
+            channel = null;
+          }
+
+          const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
+          const signature = queueRenderSignature(queue);
+          let edited = false;
+          if (matches.length) {
+            await runWithConcurrency(matches, 2, async message => {
+              try {
+                await message.edit(payload);
+                queueRenderCache.set(interaction.guildId + ":" + message.id, signature);
+                edited = true;
+              } catch (error) {
+                console.warn("Não foi possível editar a fila " + queue.id + ":", error?.message || error);
+              }
+            });
+          } else if (queue.messageId && channel) {
+            const known = await channel.messages.fetch(queue.messageId).catch(() => null);
+            if (known && known.author?.id === client.user?.id) {
+              try {
+                await known.edit(payload);
+                queueRenderCache.set(interaction.guildId + ":" + known.id, signature);
+                edited = true;
+              } catch (error) {
+                console.warn("Não foi possível reparar a fila " + queue.id + ":", error?.message || error);
+              }
+            }
+          }
+
+          if (edited) {
+            updated++;
+            const preferred = matches.find(message => message.id === queue.messageId) || matches[0];
+            if (preferred) { queue.messageId = preferred.id; queue.channelId = preferred.channelId || queue.channelId; }
+          } else if (channel) {
+            try {
+              if (channel.isThread?.() && channel.archived) await channel.setArchived(false).catch(() => {});
+              const sent = await channel.send(payload);
+              queue.messageId = sent.id;
+              queue.channelId = channel.id;
+              queueRenderCache.set(interaction.guildId + ":" + sent.id, signature);
+              recreated++;
+            } catch (error) {
               const fallbackId = queue.parentChannelId;
-              const fallback = fallbackId && fallbackId !== group.channelId
+              const fallback = fallbackId && fallbackId !== channel.id
                 ? interaction.guild.channels.cache.get(fallbackId)
                   || await interaction.guild.channels.fetch(fallbackId).catch(() => null)
                 : null;
-              if (!fallback || !fallback.isTextBased?.() || !fallback.messages) { skipped++; continue; }
-              try {
-                const message = queue.messageId ? await fallback.messages.fetch(queue.messageId).catch(() => null) : null;
-                const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
-                const signature = queueRenderSignature(queue);
-                if (message) { await message.edit(payload); queueRenderCache.set(interaction.guildId + ":" + message.id, signature); updated++; }
-                else { const sent = await fallback.send(payload); queue.messageId = sent.id; queueRenderCache.set(interaction.guildId + ":" + sent.id, signature); recreated++; }
-                queue.channelId = fallback.id;
-                queue.threadId = null;
-                queue.guildId = interaction.guildId;
-              } catch (error) {
-                skipped++;
-                console.warn("Não foi possível recuperar a fila " + queue.id + ":", error?.message || error);
-              }
-            }
-            return;
-          }
-
-          const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
-          const recentMessages = recent ? Array.from(recent.values()) : [];
-          await runWithConcurrency(group.queues, 3, async queue => {
-            const matches = recentMessages.filter(message => {
-              if (message.author?.id !== client.user?.id) return false;
-              const hasQueueId = message.components?.some(row => row.components?.some(component => {
-                const customId = component.customId || component.custom_id || "";
-                return customId.split("|")[1] === queue.id;
-              }));
-              if (hasQueueId) return true;
-              const embed = message.embeds?.[0];
-              const title = embed?.title || "";
-              const description = embed?.description || "";
-              const legacyTitle = String(queue.format).replace("x", "v") + " " + modalityName(queue.modality)
-                + " | " + money(queue.value);
-              return title === legacyTitle || (title === queueTitle(queue) && description.includes(money(queue.value)));
-            });
-
-            if (queue.messageId && !matches.some(message => message.id === queue.messageId)) {
-              const known = await channel.messages.fetch(queue.messageId).catch(() => null);
-              if (known && known.author?.id === client.user?.id) matches.push(known);
-            }
-
-            const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
-            const signature = queueRenderSignature(queue);
-            if (matches.length) {
-              let edited = false;
-              await runWithConcurrency(matches, 2, async message => {
-                try { await message.edit(payload); queueRenderCache.set(interaction.guildId + ":" + message.id, signature); edited = true; }
-                catch (error) { console.warn("Não foi possível editar a fila " + queue.id + ":", error?.message || error); }
-              });
-              if (edited) updated++; else skipped++;
-              queue.messageId = (matches.find(message => message.id === queue.messageId) || matches[0]).id;
-            } else {
-              try {
-                if (channel.isThread?.() && channel.archived) await channel.setArchived(false).catch(() => {});
-                const sent = await channel.send(payload);
-                queue.messageId = sent.id;
-                queueRenderCache.set(interaction.guildId + ":" + sent.id, signature);
-                recreated++;
-              } catch (error) {
-                const fallbackId = queue.parentChannelId;
-                const fallback = fallbackId && fallbackId !== channel.id
-                  ? interaction.guild.channels.cache.get(fallbackId)
-                    || await interaction.guild.channels.fetch(fallbackId).catch(() => null)
-                  : null;
-                if (fallback?.isTextBased?.()) {
-                  try {
-                    const sent = await fallback.send(payload);
-                    queueRenderCache.set(interaction.guildId + ":" + sent.id, signature);
-                    queue.channelId = fallback.id;
-                    queue.threadId = null;
-                    queue.messageId = sent.id;
-                    recreated++;
-                  } catch (fallbackError) {
-                    skipped++;
-                    console.warn("Não foi possível republicar a fila " + queue.id + ":", fallbackError?.message || fallbackError);
-                  }
-                } else {
+              if (fallback?.isTextBased?.()) {
+                try {
+                  const sent = await fallback.send(payload);
+                  queue.messageId = sent.id;
+                  queue.channelId = fallback.id;
+                  queue.threadId = null;
+                  queueRenderCache.set(interaction.guildId + ":" + sent.id, signature);
+                  recreated++;
+                } catch (fallbackError) {
                   skipped++;
-                  console.warn("Não foi possível republicar a fila " + queue.id + ":", error?.message || error);
+                  console.warn("Não foi possível republicar a fila " + queue.id + ":", fallbackError?.message || fallbackError);
                 }
+              } else {
+                skipped++;
+                console.warn("Não foi possível republicar a fila " + queue.id + ":", error?.message || error);
               }
             }
-            queue.guildId = interaction.guildId;
-          });
+          } else {
+            skipped++;
+          }
+          queue.guildId = interaction.guildId;
         });
 
         saveDatabase();
         return interaction.editReply([
-          "Atualização concluída.",
-          "Filas sincronizadas: " + updated,
+          "Busca concluída em " + channels.length + " canais.",
+          "Filas atualizadas: " + updated,
           "Filas republicadas: " + recreated,
-          "Filas sem acesso ou sem canal localizado: " + skipped,
-          "Os dados dos jogadores foram preservados; nenhuma fila foi apagada."
+          "Sem acesso/canal compatível: " + skipped,
+          "Os dados disponíveis foram preservados; nenhuma mensagem foi apagada."
         ].join("\n"));
       }
 
@@ -2480,43 +2644,16 @@ client.on("interactionCreate", async interaction => {
           return safeShowModal(interaction, modal);
         }
 
-        filaSetup.set(interaction.user.id, {
-          format: null,
-          modality: null,
-          channelId: null
-        });
-
-        return interaction.reply({
-          content: "🎯 **Configuração da fila**\n\nEscolha somente o **formato**, a **modalidade** e o **canal onde todas as filas serão publicadas**.",
-          components: [
-            new ActionRowBuilder().addComponents(
-              new StringSelectMenuBuilder()
-                .setCustomId("fila_setup_format")
-                .setPlaceholder("1️⃣ Escolha o formato")
-                .addOptions(FORMATS.map(format => ({
-                  label: format,
-                  value: format,
-                  description: "Fila para 2 jogadores"
-                })))
-            ),
-            new ActionRowBuilder().addComponents(
-              new StringSelectMenuBuilder()
-                .setCustomId("fila_setup_modality")
-                .setPlaceholder("2️⃣ Escolha a modalidade")
-                .addOptions(MODALITIES.map(modality => ({
-                  label: modalityName(modality),
-                  value: modality
-                })))
-            ),
-            new ActionRowBuilder().addComponents(
-              new ChannelSelectMenuBuilder()
-                .setCustomId("fila_setup_channel")
-                .setPlaceholder("3️⃣ Escolha o canal de publicação")
-                .setChannelTypes(ChannelType.GuildText)
-            )
-          ],
+        const slots = Array.from({ length: 4 }, () => ({ format: null, modality: null, channelId: null }));
+        filaSetup.set(interaction.user.id, { slots, guildId: interaction.guildId });
+        const setupPanels = slots.map((slot, index) => ({
+          content: `🎯 **Configuração da fila — destino ${index + 1}/4**\n\nEscolha o formato, a modalidade e o canal deste destino. Cada cartão pode ter uma configuração diferente.`,
+          components: queueSetupSlotComponents(index),
           flags: MessageFlags.Ephemeral
-        });
+        }));
+        await interaction.reply(setupPanels[0]);
+        for (const panel of setupPanels.slice(1)) await interaction.followUp(panel);
+        return;
       }
 
 
@@ -3804,106 +3941,14 @@ client.on("interactionCreate", async interaction => {
     if (interaction.isChannelSelectMenu()) {
       if (!(await requireAdmin(interaction))) return;
 
-      if (interaction.customId === "fila_setup_channel") {
-        const setup = filaSetup.get(interaction.user.id) || {
-          format: null,
-          modality: null,
-          channelId: null
-        };
-        setup.channelId = interaction.values[0];
-        filaSetup.set(interaction.user.id, setup);
-
-        if (!setup.format || !setup.modality) {
-          return interaction.deferUpdate();
-        }
-
-        // Confirma imediatamente a seleção para não deixar a interação expirar.
+      const queueSlotMatch = interaction.customId.match(/^fila_slot_channel_([1-4])$/);
+      if (queueSlotMatch) {
+        const setup = filaSetup.get(interaction.user.id);
+        if (!setup || setup.guildId !== interaction.guildId) return deny(interaction, "❌ Esta configuração expirou. Inicie `/fila` novamente.");
+        setup.slots[Number(queueSlotMatch[1]) - 1].channelId = interaction.values[0];
         await interaction.deferUpdate();
-
-        const channel = await getChannel(interaction.guild, setup.channelId);
-        if (!channel || !channel.isTextBased() || typeof channel.send !== "function") {
-          filaSetup.delete(interaction.user.id);
-          return interaction.editReply({
-            content: "❌ O canal selecionado é inválido ou não permite o envio de mensagens.",
-            components: []
-          });
-        }
-
-        const values = ALLOWED_VALUES.slice().sort((a, b) => b - a);
-
-        try {
-          for (const value of values) {
-            // 1x1 = uma fila por valor, com exatamente 3 botões.
-            const modes = setup.format === "1x1" ? ["choice"] : ["normal"];
-
-            for (const mode of modes) {
-              const queue = getQueue(setup.format, setup.modality, value, mode);
-              queue.parentChannelId = channel.id;
-              queue.channelId = channel.id;
-              queue.guildId = interaction.guild.id;
-
-              // Limpa a referência de tópicos antigos criados por versões anteriores.
-              // A fila em si NÃO cria tópico: ela permanece como mensagem no canal.
-              if (queue.threadId) {
-                const oldThread = await interaction.guild.channels.fetch(queue.threadId).catch(() => null);
-                if (oldThread?.isThread?.()) {
-                  await oldThread.setArchived(true, "Fila migrada para mensagem no canal").catch(() => {});
-                }
-                queue.threadId = null;
-                queue.messageId = null;
-              }
-
-              let message = queue.messageId
-                ? await channel.messages.fetch(queue.messageId).catch(() => null)
-                : null;
-
-              const payload = {
-                embeds: [queueEmbed(queue)],
-                components: queueComponents(queue)
-              };
-
-              if (message) {
-                await message.edit(payload);
-              } else {
-                message = await channel.send(payload);
-                queue.messageId = message.id;
-              }
-            }
-          }
-
-          saveDatabase();
-          filaSetup.delete(interaction.user.id);
-
-          return interaction.editReply({
-            content: [
-              "✅ **FILAS PUBLICADAS COM SUCESSO!**",
-              "",
-              `📌 **Canal:** ${channel}`,
-              `🎮 **Formato:** ${setup.format}`,
-              `📱 **Modalidade:** ${modalityName(setup.modality)}`,
-              `💰 **Valores:** ${values.map(money).join(", ")}`,
-              "",
-              "📋 As filas já estão disponíveis no canal escolhido."
-            ].join("\n"),
-            components: []
-          });
-        } catch (error) {
-          console.error("❌ Erro ao publicar as filas pelo /fila:", error);
-          filaSetup.delete(interaction.user.id);
-
-          return interaction.editReply({
-            content: [
-              "❌ **NÃO FOI POSSÍVEL PUBLICAR AS FILAS.**",
-              "",
-              "Verifique as permissões do bot no canal escolhido: Ver Canal, Enviar Mensagens, Inserir Links e Usar Componentes.",
-              "",
-              `Detalhe técnico: ${error?.message || "erro desconhecido"}`
-            ].join("\n"),
-            components: []
-          });
-        }
+        return tryPublishFilaSetup(interaction, setup);
       }
-
       // fila_setup_channel é tratado exclusivamente pelo fluxo de publicação acima.
       // Nunca deixar cair no salvamento genérico de canais.
       if (interaction.customId === "fila_setup_channel") return;
@@ -4473,6 +4518,18 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
+      const filaSlotSelection = interaction.customId.match(/^fila_slot_(format|modality)_([1-4])$/);
+      if (filaSlotSelection) {
+        if (!(await requireAdmin(interaction))) return;
+        const setup = filaSetup.get(interaction.user.id);
+        if (!setup || setup.guildId !== interaction.guildId) return deny(interaction, "❌ Esta configuração expirou. Inicie `/fila` novamente.");
+        const slot = setup.slots[Number(filaSlotSelection[2]) - 1];
+        if (filaSlotSelection[1] === "format") slot.format = interaction.values[0];
+        else slot.modality = interaction.values[0];
+        await interaction.deferUpdate();
+        return tryPublishFilaSetup(interaction, setup);
+      }
+
       if (interaction.customId === "fila_setup_format") {
         if (!(await requireAdmin(interaction))) return;
         const setup = filaSetup.get(interaction.user.id) || { format: null, modality: null, channelId: null };
@@ -4718,8 +4775,6 @@ function queueRenderSignature(queue) {
 }
 
 async function refreshQueueMessage(queue, guild) {
-  if (!queue.channelId || !queue.messageId) return;
-
   const payload = {
     embeds: [queueEmbed(queue)],
     components: queueComponents(queue)
@@ -4728,22 +4783,28 @@ async function refreshQueueMessage(queue, guild) {
     embeds: payload.embeds.map(embed => embed.toJSON()),
     components: payload.components.map(row => row.toJSON())
   });
-  const cacheKey = `${guild.id}:${queue.messageId}`;
-  if (queueRenderCache.get(cacheKey) === signature) return;
-
-  const channel = guild.channels.cache.get(queue.channelId) || await guild.channels.fetch(queue.channelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) return;
-  const message = await channel.messages.fetch(queue.messageId).catch(() => null);
-  if (!message) {
-    queueRenderCache.delete(cacheKey);
-    return;
-  }
-  try {
-    await message.edit(payload);
-    queueRenderCache.set(cacheKey, signature);
-  } catch {
-    // Uma falha temporária será tentada novamente na próxima manutenção.
-  }
+  const publications = Array.isArray(queue.publications) && queue.publications.length
+    ? queue.publications
+    : (queue.channelId && queue.messageId ? [{ channelId: queue.channelId, messageId: queue.messageId }] : []);
+  await runWithConcurrency(publications, 4, async publication => {
+    if (!publication.channelId || !publication.messageId) return;
+    const cacheKey = `${guild.id}:${publication.messageId}`;
+    if (queueRenderCache.get(cacheKey) === signature) return;
+    const channel = guild.channels.cache.get(publication.channelId)
+      || await guild.channels.fetch(publication.channelId).catch(() => null);
+    if (!channel || !channel.isTextBased()) return;
+    const message = await channel.messages.fetch(publication.messageId).catch(() => null);
+    if (!message) {
+      queueRenderCache.delete(cacheKey);
+      return;
+    }
+    try {
+      await message.edit(payload);
+      queueRenderCache.set(cacheKey, signature);
+    } catch {
+      // Uma falha temporária será tentada novamente na próxima manutenção.
+    }
+  });
 }
 
 async function keepOpenTicketsAlive(guild) {
