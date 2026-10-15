@@ -46,7 +46,7 @@ REGRAS:
 */
 
 const {
-  MessageFlags, Client,
+  MessageFlags, Client, AttachmentBuilder,
   GatewayIntentBits,
   Partials,
   REST,
@@ -1463,6 +1463,104 @@ function memberIsTicketResponsible(member) {
   return ticketResponsibleRoleIds().some(roleId => member.roles.cache.has(roleId));
 }
 
+async function createTicketTranscript(ticket, ticketChannel) {
+  const messages = [];
+  let before;
+
+  while (true) {
+    const batch = await ticketChannel.messages.fetch({
+      limit: 100,
+      ...(before ? { before } : {})
+    });
+    if (!batch.size) break;
+
+    messages.push(...batch.values());
+    const oldestMessage = batch.last();
+    if (batch.size < 100 || !oldestMessage || oldestMessage.id === before) break;
+    before = oldestMessage.id;
+  }
+
+  messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  const ticketType = TICKET_TYPES[ticket.type] || TICKET_TYPES.support;
+  const transcript = [
+    `TRANSCRIÇÃO DO TICKET: ${ticketChannel.name}`,
+    `Tipo: ${ticketType.label}`,
+    `Pessoa que abriu: ${ticket.creatorId ? `<@${ticket.creatorId}> (${ticket.creatorId})` : "desconhecido"}`,
+    `Responsável: ${ticket.claimedBy ? `<@${ticket.claimedBy}> (${ticket.claimedBy})` : "não assumido"}`,
+    `Encerrado por: ${ticket.closedBy ? `<@${ticket.closedBy}> (${ticket.closedBy})` : "desconhecido"}`,
+    `Criado em: ${ticket.createdAt ? new Date(ticket.createdAt).toISOString() : "desconhecido"}`,
+    `Encerrado em: ${ticket.closedAt ? new Date(ticket.closedAt).toISOString() : new Date().toISOString()}`,
+    "",
+    "===== CONVERSA =====",
+    ""
+  ];
+
+  for (const message of messages) {
+    const author = message.member?.displayName
+      || message.author?.globalName
+      || message.author?.username
+      || "Usuário desconhecido";
+    const username = message.author?.username ? ` (@${message.author.username})` : "";
+    const parts = [message.content?.trim()].filter(Boolean);
+
+    for (const embed of message.embeds || []) {
+      const embedLines = [embed.title, embed.description, embed.url].filter(Boolean);
+      if (embedLines.length) parts.push(`[EMBED]\n${embedLines.join("\n")}`);
+    }
+
+    for (const attachment of message.attachments?.values?.() || []) {
+      parts.push(`[ANEXO] ${attachment.name || "arquivo"}: ${attachment.url}`);
+    }
+
+    for (const sticker of message.stickers?.values?.() || []) {
+      parts.push(`[FIGURINHA] ${sticker.name}`);
+    }
+
+    transcript.push(
+      `[${new Date(message.createdTimestamp).toISOString()}] ${author}${username} (ID ${message.author?.id || "?"})`,
+      parts.join("\n") || "[mensagem sem texto]",
+      ""
+    );
+  }
+
+  return transcript.join("\n");
+}
+
+async function sendTicketTranscript(ticket, ticketChannel) {
+  // creatorId é definido como interaction.user.id na abertura do ticket.
+  const openerId = ticket.creatorId;
+  const transcript = await createTicketTranscript(ticket, ticketChannel);
+  const recipient = await client.users.fetch(openerId);
+  const maxChunkBytes = 7 * 1024 * 1024;
+  const chunks = [];
+  let current = "";
+
+  for (const line of transcript.split(/(?<=\n)/)) {
+    if (current && Buffer.byteLength(current + line, "utf8") > maxChunkBytes) {
+      chunks.push(current);
+      current = "";
+    }
+    current += line;
+  }
+  if (current || !chunks.length) chunks.push(current);
+
+  const fileParts = chunks.map((content, index) => new AttachmentBuilder(
+    Buffer.from(content, "utf8"),
+    { name: `transcript-${ticket.id}${chunks.length > 1 ? `-${index + 1}` : ""}.txt` }
+  ));
+
+  for (let index = 0; index < fileParts.length; index += 3) {
+    const batch = fileParts.slice(index, index + 3);
+    const firstPart = index + 1;
+    const lastPart = index + batch.length;
+    await recipient.send({
+      content: `Segue o transcript do seu ticket **${ticketChannel.name}**${fileParts.length > 1 ? ` (parte${batch.length > 1 ? "s" : ""} ${firstPart}–${lastPart} de ${fileParts.length})` : ""}.`,
+      files: batch
+    });
+  }
+}
+
 async function claimTicket(ticket, ticketChannel, userId, displayName) {
   if (!ticket || ticket.status !== "open") {
     throw new Error("Este ticket não está mais aberto.");
@@ -1475,6 +1573,8 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
   if (ticket.claimedBy && ticket.claimedBy !== userId) {
     throw new Error(`Este ticket já foi assumido por <@${ticket.claimedBy}>.`);
   }
+
+  const isFirstClaim = !ticket.claimedBy;
 
   // Quem clicou no botão já está dentro da thread, portanto não tentamos
   // adicioná-lo novamente. Isso evita a falha que fazia o botão não assumir.
@@ -1525,12 +1625,20 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
     .trim()
     .slice(0, 82) || `usuario-${userId.slice(-5)}`;
 
-  const newName = `resolvendo-${cleanName}`.replace(/\s+/g, "-").slice(0, 100);
+  const newName = `RESOLVENDO | ${cleanName.toLocaleUpperCase("pt-BR")}`.slice(0, 100);
 
   try {
     await ticketChannel.setName(newName, "Ticket assumido");
   } catch (error) {
     console.error("❌ Não foi possível alterar o nome do ticket:", error);
+  }
+
+  if (isFirstClaim) {
+    await ticketChannel.send({
+      content: `✅ **TICKET ASSUMIDO POR <@${userId}>**`
+    }).catch(error => {
+      console.error("❌ Não foi possível enviar a confirmação de ticket assumido:", error);
+    });
   }
 
   return newName;
@@ -3799,8 +3907,22 @@ client.on("interactionCreate", async interaction => {
         ticket.closedAt = Date.now();
         saveDatabase();
 
+        await ticketChannel.send({
+          content: `🔒 **TICKET ENCERRADO POR <@${interaction.user.id}>.** Este canal será removido em instantes.`
+        }).catch(error => {
+          console.error("❌ Não foi possível enviar a confirmação de encerramento do ticket:", error);
+        });
+
+        let transcriptDeliveryMessage = "✅ O transcript foi enviado por mensagem privada para quem abriu o ticket.";
+        try {
+          await sendTicketTranscript(ticket, ticketChannel);
+        } catch (error) {
+          transcriptDeliveryMessage = "⚠️ Não consegui enviar o transcript por mensagem privada. A pessoa pode estar com DMs fechadas ou o bot pode não ter conseguido ler o histórico.";
+          console.error("❌ Não foi possível enviar o transcript do ticket:", error);
+        }
+
         await interaction.editReply({
-          content: "",
+          content: transcriptDeliveryMessage,
           embeds: [],
           components: []
         }).catch(() => {});
