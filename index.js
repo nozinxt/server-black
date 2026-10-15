@@ -565,7 +565,7 @@ async function playerSelectOptions(guild, players, emoji) {
 }
 
 function queueTitle(queue) {
-  return `${String(queue.format).replace("x", "v")} ${modalityName(queue.modality)} | ${money(queue.value)}`;
+  return String(queue.format).replace("x", "v") + " " + modalityName(queue.modality);
 }
 
 function queueDescription(queue) {
@@ -580,11 +580,13 @@ function queueDescription(queue) {
           : mode === "1emu" ? " — 1Emu"
           : mode === "2emu" ? " — 2Emu"
           : "";
-        return `**${index + 1}.** <@${id}>${modeText}`;
+        return "**" + (index + 1) + ".** <@" + id + ">" + modeText;
       }).join("\n");
 
   return [
-    "**Jogadores**",
+    "**Valor da aposta** <:valorfila:1560359416744648815> **" + money(queue.value) + "**",
+    "",
+    "**Jogadores** <:quantidade:1560359696173371432>",
     players
   ].join("\n");
 }
@@ -593,16 +595,24 @@ function queueEmbed(queue) {
   return new EmbedBuilder()
     .setColor(db.config.embedColor || "#5865F2")
     .setTitle(queueTitle(queue))
-    .setDescription(queueDescription(queue))
+    .setDescription("\u200b\n" + queueDescription(queue) + "\n\n\u200b")
     .setFooter({ text: "🎮 Sistema de Apostas" });
 }
 
 function queueComponents(queue) {
+  if (["2x2", "3x3"].includes(queue.format) && queue.modality !== "misto") {
+    return [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("queue_join|" + queue.id + "|normal").setLabel("Normal").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("queue_leave|" + queue.id).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
+      )
+    ];
+  }
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("◦ Gelo Normal").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("◦ Gelo Infinito").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair").setStyle(ButtonStyle.Danger)
       )
     ];
@@ -630,8 +640,8 @@ function queueComponents(queue) {
   if (["2x2", "3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setEmoji({ id: "1558714390268743740" }).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("full ump e xm8").setEmoji({ id: "1555678680447975565" }).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("Normal").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|full_ump_xm8`).setLabel("Full UMP / XM8").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
@@ -643,8 +653,8 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setEmoji({ id: "1555678519516991488" }).setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("◦ Gelo Normal").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("◦ Gelo Infinito").setStyle(ButtonStyle.Primary)
     )
   ];
 }
@@ -849,7 +859,7 @@ function paymentMessage(bet) {
     `🔑 **Chave PIX:** ${pix.key}`,
     "Faça o pagamento e aguarde a confirmação do Mediador."
   ].join("\n"));
-  const qr = pix.qr && validUrl(pix.qr) ? pix.qr : createPixQrUrl(pix.name, pix.key);
+  const qr = createPixQrUrl(pix.name, pix.key, db.config.embedColor);
   if (qr) embed.setImage(qr);
 
   return { embed, key: pix.key, qr };
@@ -1212,10 +1222,10 @@ async function finishStreamerMatch(message, match) {
 ======================================================== */
 
 const TICKET_TYPES = {
-  support: { label: "Suporte", emoji: { id: "15597319993952921218", name: "suporte" }, channelKey: "ticketSupportChannelId" },
-  refund: { label: "Reembolso", emoji: { id: "1559731964599074926", name: "reembolso" }, channelKey: "ticketRefundChannelId" },
-  vacancies: { label: "Vagas", emoji: { id: "1559731938019770458", name: "vagas" }, channelKey: "ticketVacanciesChannelId" },
-  event: { label: "Receber Evento", emoji: { id: "1559731895154249789", name: "receber_evento" }, channelKey: "ticketEventChannelId" }
+  support: { label: "Suporte", emoji: "", channelKey: "ticketSupportChannelId" },
+  refund: { label: "Reembolso", emoji: "", channelKey: "ticketRefundChannelId" },
+  vacancies: { label: "Vagas", emoji: "", channelKey: "ticketVacanciesChannelId" },
+  event: { label: "Receber Evento", emoji: "", channelKey: "ticketEventChannelId" }
 };
 
 function ticketCreationPanelComponents() {
@@ -1225,10 +1235,10 @@ function ticketCreationPanelComponents() {
         .setCustomId("ticket_create_menu")
         .setPlaceholder("Selecione o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", description: "Atendimento geral e suporte.", emoji: { id: "15597319993952921218", name: "suporte" } },
-          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso.", emoji: { id: "1559731964599074926", name: "reembolso" } },
-          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas.", emoji: { id: "1559731938019770458", name: "vagas" } },
-          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos.", emoji: { id: "1559731895154249789", name: "receber_evento" } }
+          { label: "Suporte", value: "support", description: "Atendimento geral e suporte.", emoji: { name: "suporte", id: "1560359877837197465" } },
+          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso.", emoji: { name: "reembolso", id: "1560359834849648740" } },
+          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas.", emoji: { name: "vagas", id: "1560359804348796988" } },
+          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos.", emoji: { name: "receber_evento", id: "1560359770840375346" } }
         ])
     )
   ];
@@ -1536,9 +1546,10 @@ function createPixPayload(name, key, city = "BRASILIA") {
   return payloadWithoutCrc + crc16Pix(payloadWithoutCrc);
 }
 
-function createPixQrUrl(name, key) {
+function createPixQrUrl(name, key, color = db.config.embedColor) {
   const payload = createPixPayload(name, key);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=24&color=000000&bgcolor=FFFFFF&data=${encodeURIComponent(payload)}`;
+  const qrColor = String(color || "#5865F2").replace("#", "").toUpperCase();
+  return `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=24&color=${qrColor}&bgcolor=FFFFFF&data=${encodeURIComponent(payload)}`;
 }
 
 /* ========================================================
@@ -1631,7 +1642,7 @@ function configButtons() {
         .addOptions([
           { label: "Cargos da equipe", value: "config_roles", emoji: "👥", description: "Configure Mediador, Analista e Streamer." },
           { label: "Taxa das apostas", value: "config_fee", emoji: "💰", description: "Defina a taxa entre R$0,01 e R$0,50." },
-          { label: "Aparência geral", value: "config_appearance", emoji: "🎨", description: "Configure cor e foto padrão das embeds." },
+          { label: "Aparência geral", value: "config_appearance", emoji: "🎨", description: "Configure cor das embeds, QR Codes e foto padrão." },
           { label: "Canais do sistema", value: "config_channels", emoji: "📢", description: "Defina os canais usados pelas análises e mediadores." },
           { label: "Canal das Apostas", value: "config_bet_channel", emoji: "🎮", description: "Escolha o canal onde as apostas privadas serão criadas como filas." },
           { label: "Categoria Streamer", value: "config_streamer_category", emoji: "🎥", description: "Escolha onde as filas de Streamer serão criadas." },
@@ -1670,6 +1681,15 @@ async function registerCommands() {
       .setName("fila")
       .setDescription("Cria e publica as filas de apostas.")
       .setDefaultMemberPermissions(null),
+
+    new SlashCommandBuilder()
+      .setName("atualizar")
+      .setDescription("Atualiza mensagens existentes do sistema.")
+      .setDefaultMemberPermissions(null)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName("fila")
+          .setDescription("Atualiza/repara as filas existentes sem apagar os dados.")),
 
     new SlashCommandBuilder()
       .setName("fila-streamer")
@@ -2214,6 +2234,51 @@ client.on("interactionCreate", async interaction => {
           components: configButtons(),
           flags: MessageFlags.Ephemeral
         });
+      }
+
+      /* /atualizar fila — repara/edita as mensagens existentes sem apagar filas */
+      if (interaction.commandName === "atualizar" && interaction.options.getSubcommand() === "fila") {
+        if (!(await requireAdmin(interaction))) return;
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        let updated = 0;
+        let recreated = 0;
+        let skipped = 0;
+
+        const queues = Object.values(db.queues || {}).filter(queue =>
+          queue?.channelId && (!queue.guildId || queue.guildId === interaction.guildId)
+        );
+
+        for (const queue of queues) {
+          const channel = interaction.guild.channels.cache.get(queue.channelId)
+            || await interaction.guild.channels.fetch(queue.channelId).catch(() => null);
+          if (!channel || !channel.isTextBased?.() || !channel.messages) { skipped++; continue; }
+
+          const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
+          const message = queue.messageId
+            ? await channel.messages.fetch(queue.messageId).catch(() => null)
+            : null;
+
+          try {
+            if (message) {
+              await message.edit(payload);
+              updated++;
+            } else {
+              const sent = await channel.send(payload);
+              queue.messageId = sent.id;
+              recreated++;
+            }
+            queue.guildId = interaction.guildId;
+          } catch (error) {
+            skipped++;
+            console.warn(`Não foi possível atualizar a fila ${queue.id}:`, error?.message || error);
+          }
+        }
+
+        queueRenderCache.clear();
+        saveDatabase();
+        return interaction.editReply(
+          `Atualização concluída.\n• Filas atualizadas: **${updated}**\n• Mensagens recriadas: **${recreated}**\n• Não foi possível atualizar: **${skipped}**\n\nOs dados dos jogadores e das filas foram preservados.`
+        );
       }
 
       /* /embeds */
@@ -4040,7 +4105,7 @@ client.on("interactionCreate", async interaction => {
         saveDatabase();
 
         return interaction.reply({
-          content: "✅ Aparência atualizada.",
+          content: "Aparência atualizada. A cor também será usada nas linhas dos QR Codes Pix novos e regenerados.",
           flags: MessageFlags.Ephemeral
         });
       }
@@ -4065,7 +4130,7 @@ client.on("interactionCreate", async interaction => {
           return deny(interaction, "❌ Nome e chave Pix são obrigatórios.");
         }
 
-        const qr = createPixQrUrl(name, key);
+        const qr = createPixQrUrl(name, key, db.config.embedColor);
         db.pix = db.pix || {};
         const previous = db.pix[interaction.user.id];
         db.pix[interaction.user.id] = {
