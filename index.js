@@ -19,7 +19,6 @@ COMANDOS:
   /embeds
   /criar ticket
   /fila streamer
-  /atualizar fila
   .ssmob
   .ssemu
   .med
@@ -75,7 +74,7 @@ const path = require("path");
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID || null;
+const GUILD_ID = process.env.GUILD_ID || "1543311671735357530";
 
 if (!TOKEN) {
   console.error("❌ DISCORD_TOKEN não configurado.");
@@ -585,8 +584,7 @@ function queueDescription(queue) {
       }).join("\n");
 
   return [
-    "**Valor da aposta** <:valorfila:1560359416744648815> **" + money(queue.value) + "**",
-    "",
+    "**Valor da aposta:** <:valorfila:1560359416744648815> " + money(queue.value),
     "**Jogadores** <:quantidade:1560359696173371432>",
     players
   ].join("\n");
@@ -596,7 +594,7 @@ function queueEmbed(queue) {
   return new EmbedBuilder()
     .setColor(db.config.embedColor || "#5865F2")
     .setTitle(queueTitle(queue))
-    .setDescription("\u200b\n" + queueDescription(queue) + "\n\n\u200b")
+    .setDescription(queueDescription(queue))
     .setFooter({ text: "🎮 Sistema de Apostas" });
 }
 
@@ -1061,10 +1059,7 @@ async function refreshStreamerQueueMessage(queue, guild) {
     embeds: [streamerQueueEmbed(queue, guild)],
     components: streamerQueueComponents(queue)
   };
-  const signature = JSON.stringify({
-    embeds: payload.embeds.map(embed => embed.toJSON()),
-    components: payload.components.map(row => row.toJSON())
-  });
+  const signature = queueRenderSignature(queue);
   const cacheKey = `${guild.id}:${queue.messageId}`;
   if (streamerQueueRenderCache.get(cacheKey) === signature) return;
 
@@ -2237,7 +2232,7 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      /* /atualizar fila — repara/edita as mensagens existentes sem apagar filas */
+      /* /atualizar fila — sincroniza todas as filas registradas e recupera mensagens faltantes */
       if (interaction.commandName === "atualizar" && interaction.options.getSubcommand() === "fila") {
         if (!(await requireAdmin(interaction))) return;
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -2246,40 +2241,125 @@ client.on("interactionCreate", async interaction => {
         let skipped = 0;
 
         const queues = Object.values(db.queues || {}).filter(queue =>
-          queue?.channelId && (!queue.guildId || queue.guildId === interaction.guildId)
+          queue && (!queue.guildId || queue.guildId === interaction.guildId)
         );
+        const channelGroups = new Map();
 
         for (const queue of queues) {
-          const channel = interaction.guild.channels.cache.get(queue.channelId)
-            || await interaction.guild.channels.fetch(queue.channelId).catch(() => null);
-          if (!channel || !channel.isTextBased?.() || !channel.messages) { skipped++; continue; }
-
-          const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
-          const message = queue.messageId
-            ? await channel.messages.fetch(queue.messageId).catch(() => null)
-            : null;
-
-          try {
-            if (message) {
-              await message.edit(payload);
-              updated++;
-            } else {
-              const sent = await channel.send(payload);
-              queue.messageId = sent.id;
-              recreated++;
-            }
-            queue.guildId = interaction.guildId;
-          } catch (error) {
-            skipped++;
-            console.warn(`Não foi possível atualizar a fila ${queue.id}:`, error?.message || error);
-          }
+          const channelId = queue.channelId || queue.threadId || queue.parentChannelId
+            || (queue.modality === "mobile" ? db.config.ssmobChannelId
+              : queue.modality === "emulador" ? db.config.ssemuChannelId : null);
+          if (!channelId) { skipped++; continue; }
+          queue.channelId = channelId;
+          if (!channelGroups.has(channelId)) channelGroups.set(channelId, []);
+          channelGroups.get(channelId).push(queue);
         }
 
-        queueRenderCache.clear();
+        const groups = Array.from(channelGroups, ([channelId, items]) => ({ channelId, queues: items }));
+        await runWithConcurrency(groups, 3, async group => {
+          let channel = interaction.guild.channels.cache.get(group.channelId)
+            || await interaction.guild.channels.fetch(group.channelId).catch(() => null);
+          if (!channel || !channel.isTextBased?.() || !channel.messages) {
+            for (const queue of group.queues) {
+              const fallbackId = queue.parentChannelId;
+              const fallback = fallbackId && fallbackId !== group.channelId
+                ? interaction.guild.channels.cache.get(fallbackId)
+                  || await interaction.guild.channels.fetch(fallbackId).catch(() => null)
+                : null;
+              if (!fallback || !fallback.isTextBased?.() || !fallback.messages) { skipped++; continue; }
+              try {
+                const message = queue.messageId ? await fallback.messages.fetch(queue.messageId).catch(() => null) : null;
+                const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
+                const signature = queueRenderSignature(queue);
+                if (message) { await message.edit(payload); queueRenderCache.set(interaction.guildId + ":" + message.id, signature); updated++; }
+                else { const sent = await fallback.send(payload); queue.messageId = sent.id; queueRenderCache.set(interaction.guildId + ":" + sent.id, signature); recreated++; }
+                queue.channelId = fallback.id;
+                queue.threadId = null;
+                queue.guildId = interaction.guildId;
+              } catch (error) {
+                skipped++;
+                console.warn("Não foi possível recuperar a fila " + queue.id + ":", error?.message || error);
+              }
+            }
+            return;
+          }
+
+          const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+          const recentMessages = recent ? Array.from(recent.values()) : [];
+          await runWithConcurrency(group.queues, 3, async queue => {
+            const matches = recentMessages.filter(message => {
+              if (message.author?.id !== client.user?.id) return false;
+              const hasQueueId = message.components?.some(row => row.components?.some(component => {
+                const customId = component.customId || component.custom_id || "";
+                return customId.split("|")[1] === queue.id;
+              }));
+              if (hasQueueId) return true;
+              const embed = message.embeds?.[0];
+              const title = embed?.title || "";
+              const description = embed?.description || "";
+              const legacyTitle = String(queue.format).replace("x", "v") + " " + modalityName(queue.modality)
+                + " | " + money(queue.value);
+              return title === legacyTitle || (title === queueTitle(queue) && description.includes(money(queue.value)));
+            });
+
+            if (queue.messageId && !matches.some(message => message.id === queue.messageId)) {
+              const known = await channel.messages.fetch(queue.messageId).catch(() => null);
+              if (known && known.author?.id === client.user?.id) matches.push(known);
+            }
+
+            const payload = { embeds: [queueEmbed(queue)], components: queueComponents(queue) };
+            const signature = queueRenderSignature(queue);
+            if (matches.length) {
+              let edited = false;
+              await runWithConcurrency(matches, 2, async message => {
+                try { await message.edit(payload); queueRenderCache.set(interaction.guildId + ":" + message.id, signature); edited = true; }
+                catch (error) { console.warn("Não foi possível editar a fila " + queue.id + ":", error?.message || error); }
+              });
+              if (edited) updated++; else skipped++;
+              queue.messageId = (matches.find(message => message.id === queue.messageId) || matches[0]).id;
+            } else {
+              try {
+                if (channel.isThread?.() && channel.archived) await channel.setArchived(false).catch(() => {});
+                const sent = await channel.send(payload);
+                queue.messageId = sent.id;
+                queueRenderCache.set(interaction.guildId + ":" + sent.id, signature);
+                recreated++;
+              } catch (error) {
+                const fallbackId = queue.parentChannelId;
+                const fallback = fallbackId && fallbackId !== channel.id
+                  ? interaction.guild.channels.cache.get(fallbackId)
+                    || await interaction.guild.channels.fetch(fallbackId).catch(() => null)
+                  : null;
+                if (fallback?.isTextBased?.()) {
+                  try {
+                    const sent = await fallback.send(payload);
+                    queueRenderCache.set(interaction.guildId + ":" + sent.id, signature);
+                    queue.channelId = fallback.id;
+                    queue.threadId = null;
+                    queue.messageId = sent.id;
+                    recreated++;
+                  } catch (fallbackError) {
+                    skipped++;
+                    console.warn("Não foi possível republicar a fila " + queue.id + ":", fallbackError?.message || fallbackError);
+                  }
+                } else {
+                  skipped++;
+                  console.warn("Não foi possível republicar a fila " + queue.id + ":", error?.message || error);
+                }
+              }
+            }
+            queue.guildId = interaction.guildId;
+          });
+        });
+
         saveDatabase();
-        return interaction.editReply(
-          `Atualização concluída.\n• Filas atualizadas: **${updated}**\n• Mensagens recriadas: **${recreated}**\n• Não foi possível atualizar: **${skipped}**\n\nOs dados dos jogadores e das filas foram preservados.`
-        );
+        return interaction.editReply([
+          "Atualização concluída.",
+          "Filas sincronizadas: " + updated,
+          "Filas republicadas: " + recreated,
+          "Filas sem acesso ou sem canal localizado: " + skipped,
+          "Os dados dos jogadores foram preservados; nenhuma fila foi apagada."
+        ].join("\n"));
       }
 
       /* /embeds */
@@ -4630,6 +4710,13 @@ client.on("interactionCreate", async interaction => {
 // Guarda a última versão enviada para não editar mensagens idênticas a cada ciclo.
 const queueRenderCache = new Map();
 
+function queueRenderSignature(queue) {
+  return JSON.stringify({
+    embeds: [queueEmbed(queue).toJSON()],
+    components: queueComponents(queue).map(row => row.toJSON())
+  });
+}
+
 async function refreshQueueMessage(queue, guild) {
   if (!queue.channelId || !queue.messageId) return;
 
@@ -4708,11 +4795,6 @@ setInterval(async () => {
       for (const queue of Object.values(db.queues || {})) {
         if (queue.channelId && (!queue.guildId || queue.guildId === guild.id)) {
           tasks.push(() => refreshQueueMessage(queue, guild));
-        }
-      }
-      for (const ticket of Object.values(db.tickets || {})) {
-        if (ticket.guildId === guild.id && ticket.status === "open") {
-          // Ticket maintenance is batched separately below.
         }
       }
       for (const queue of Object.values(db.streamerQueues || {})) {
