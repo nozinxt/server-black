@@ -11,11 +11,13 @@ VARIÁVEIS DE AMBIENTE:
   DISCORD_TOKEN = token do bot
   CLIENT_ID     = ID da aplicação
   GUILD_ID      = opcional; registra comandos no servidor
+  EMOJI_PORTA_ENTRADA_ID / EMOJI_PORTA_SAIDA_ID = emojis personalizados das filas
 
 COMANDOS:
   /config
   /painel cadastro
   /fila
+  /atualizar fila
   /embeds
   /criar ticket
   /fila streamer
@@ -154,7 +156,8 @@ function createDefaultDatabase() {
       ticketPanelFooter: "🎮 Sistema de Apostas",
       mediatorQueueMessageId: null,
       pixPanelChannelId: null,
-      pixPanelMessageId: null
+      pixPanelMessageId: null,
+      queueDestinations: []
     },
 
     pix: {},
@@ -548,20 +551,31 @@ function getQueue(format, modality, value, mode) {
 
 async function publishQueueDestinations(guild, destinations) {
   const values = ALLOWED_VALUES.slice().sort((a, b) => b - a);
+  const grouped = new Map();
   let published = 0;
 
   for (const destination of destinations) {
-    const channel = await getChannel(guild, destination.channelId);
-    if (!channel || !channel.isTextBased?.() || typeof channel.send !== "function") {
-      throw new Error("Um dos canais selecionados é inválido ou não permite enviar mensagens.");
-    }
-
     const modes = destination.format === "1x1" ? ["choice"] : ["normal"];
     for (const value of values) {
       for (const mode of modes) {
         const queue = getQueue(destination.format, destination.modality, value, mode);
         queue.guildId = guild.id;
         queue.publications = Array.isArray(queue.publications) ? queue.publications : [];
+        if (!grouped.has(queue.id)) grouped.set(queue.id, { queue, destinations: [] });
+        const group = grouped.get(queue.id);
+        if (!group.destinations.some(item => item.channelId === destination.channelId)) group.destinations.push(destination);
+      }
+    }
+  }
+
+  const failures = [];
+  await runWithConcurrency(Array.from(grouped.values()), 6, async ({ queue, destinations: queueDestinations }) => {
+    try {
+      for (const destination of queueDestinations) {
+        const channel = await getChannel(guild, destination.channelId);
+        if (!channel || !channel.isTextBased?.() || typeof channel.send !== "function") {
+          throw new Error("Um dos canais selecionados é inválido ou não permite enviar mensagens.");
+        }
         let publication = queue.publications.find(item => item.channelId === channel.id);
         let message = publication?.messageId
           ? await channel.messages.fetch(publication.messageId).catch(() => null)
@@ -580,6 +594,7 @@ async function publishQueueDestinations(guild, destinations) {
         } else {
           publication.messageId = message.id;
         }
+        queueRenderCache.set(guild.id + ":" + message.id, queueRenderSignature(queue));
 
         // Mantém os campos antigos para compatibilidade com versões anteriores.
         if (!queue.messageId) {
@@ -588,14 +603,30 @@ async function publishQueueDestinations(guild, destinations) {
           queue.parentChannelId = channel.id;
           queue.threadId = null;
         }
-      }
+        }
+    } catch (error) {
+      failures.push(error);
     }
-  }
+  });
+  if (failures.length) throw failures[0];
   return { values, published };
 }
 
+const QUEUE_EMOJI_IDS = {
+  geloNormal: "1555678519516991488",
+  geloInfinito: "1555678519516991488",
+  entrar: "1560389058360770570",
+  sair: "1560389119706927237"
+};
+
+function addCustomEmoji(button, emojiName, emojiId) {
+  const id = String(emojiId || "").trim();
+  if (/^\d{15,22}$/.test(id)) button.setEmoji({ name: emojiName, id });
+  return button;
+}
+
 async function tryPublishFilaSetup(interaction, setup) {
-  if (!setup.slots.every(item => item.format && item.modality && item.channelId)) return;
+  if (!setup.slots.every(item => item.format && item.modality && item.channelId && item.confirmed)) return;
   if (new Set(setup.slots.map(item => item.channelId)).size !== 4) {
     return interaction.followUp({
       content: "❌ Os quatro destinos precisam usar canais diferentes. Altere o canal repetido em um dos cartões.",
@@ -604,6 +635,11 @@ async function tryPublishFilaSetup(interaction, setup) {
   }
   try {
     const result = await publishQueueDestinations(interaction.guild, setup.slots);
+    db.config.queueDestinations = setup.slots.map(item => ({
+      format: item.format,
+      modality: item.modality,
+      channelId: item.channelId
+    }));
     saveDatabase();
     filaSetup.delete(interaction.user.id);
     return interaction.followUp({
@@ -616,6 +652,7 @@ async function tryPublishFilaSetup(interaction, setup) {
     });
   } catch (error) {
     console.error("Erro ao publicar filas nos destinos selecionados:", error);
+    saveDatabase();
     return interaction.followUp({
       content: "❌ Não foi possível publicar as filas. Verifique as permissões nos quatro canais. Detalhe: " + (error?.message || "erro desconhecido"),
       flags: MessageFlags.Ephemeral
@@ -623,26 +660,32 @@ async function tryPublishFilaSetup(interaction, setup) {
   }
 }
 
-function queueSetupSlotComponents(slotIndex) {
+function queueSetupSlotComponents(slotIndex, current = {}) {
   const suffix = "_" + (slotIndex + 1);
   return [
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("fila_slot_format" + suffix)
         .setPlaceholder("1. Escolha o formato")
-        .addOptions(FORMATS.map(format => ({ label: format, value: format })))
+        .addOptions(FORMATS.map(format => ({ label: format, value: format, default: current.format === format })))
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("fila_slot_modality" + suffix)
         .setPlaceholder("2. Escolha a modalidade")
-        .addOptions(MODALITIES.map(modality => ({ label: modalityName(modality), value: modality })))
+        .addOptions(MODALITIES.map(modality => ({ label: modalityName(modality), value: modality, default: current.modality === modality })))
     ),
     new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder()
         .setCustomId("fila_slot_channel" + suffix)
         .setPlaceholder("3. Escolha o canal de publicação")
         .setChannelTypes(ChannelType.GuildText)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("fila_slot_save" + suffix)
+        .setLabel("Salvar este destino")
+        .setStyle(ButtonStyle.Success)
     )
   ];
 }
@@ -685,8 +728,8 @@ function queueDescription(queue) {
       }).join("\n");
 
   return [
-    "**Valor da aposta:** <:valorfila:1560359416744648815> " + money(queue.value),
-    "**Jogadores** <:quantidade:1560359696173371432>",
+    "<:valorfila:1560359416744648815> **Valor da aposta:** " + money(queue.value),
+    "<:quantidade:1560359696173371432> **Jogadores**",
     players
   ].join("\n");
 }
@@ -703,16 +746,16 @@ function queueComponents(queue) {
   if (["2x2", "3x3"].includes(queue.format) && queue.modality !== "misto") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("queue_join|" + queue.id + "|normal").setLabel("〔▯〕 Entrar na fila").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("queue_leave|" + queue.id).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
+        addCustomEmoji(new ButtonBuilder().setCustomId("queue_join|" + queue.id + "|normal").setLabel("〔▯→〕 Entrar na fila").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId("queue_leave|" + queue.id).setLabel("〔←▯〕 Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
   if (queue.format === "1x1") {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("〔❄〕 Entrar na fila · Gelo Normal").setEmoji("❄️").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("〔❄〕 Entrar na fila · Gelo Infinito").setEmoji("❄️").setStyle(ButtonStyle.Primary),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_normal`).setLabel("Gelo Normal").setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|gelo_infinito`).setLabel("Gelo Infinito").setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito),
         new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
       )
     ];
@@ -740,8 +783,8 @@ function queueComponents(queue) {
   if (["2x2", "3x3", "4x4"].includes(queue.format)) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("〔▯〕 Entrar na fila").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔×〕 Sair da fila").setStyle(ButtonStyle.Danger)
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_join|${queue.id}|normal`).setLabel("〔▯→〕 Entrar na fila").setStyle(ButtonStyle.Secondary), "portaaberta", QUEUE_EMOJI_IDS.entrar),
+        addCustomEmoji(new ButtonBuilder().setCustomId(`queue_leave|${queue.id}`).setLabel("〔←▯〕 Sair da fila").setStyle(ButtonStyle.Danger), "portafechada", QUEUE_EMOJI_IDS.sair)
       )
     ];
   }
@@ -752,8 +795,8 @@ function queueComponents(queue) {
 function queueOneVsOneModeComponents(format, modality, value, channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("〔❄〕 Entrar na fila · Gelo Normal").setEmoji("❄️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("〔❄〕 Entrar na fila · Gelo Infinito").setEmoji("❄️").setStyle(ButtonStyle.Primary)
+      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_normal|${channelId}`).setLabel("Gelo Normal").setStyle(ButtonStyle.Secondary), "blackgelo", QUEUE_EMOJI_IDS.geloNormal),
+      addCustomEmoji(new ButtonBuilder().setCustomId(`publish_queue|${format}|${modality}|${value}|gelo_infinito|${channelId}`).setLabel("Gelo Infinito").setStyle(ButtonStyle.Primary), "blackgelo", QUEUE_EMOJI_IDS.geloInfinito)
     )
   ];
 }
@@ -1331,10 +1374,10 @@ function ticketCreationPanelComponents() {
         .setCustomId("ticket_create_menu")
         .setPlaceholder("Selecione o tipo de atendimento")
         .addOptions([
-          { label: "Suporte", value: "support", description: "Atendimento geral e suporte. <:suporte:1560359877837197465>" },
-          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso. <:reembolso:1560359834849648740>" },
-          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas. <:vagas:1560359804348796988>" },
-          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos. <:receber_evento:1560359770840375346>" }
+          { label: "Suporte", value: "support", description: "Atendimento geral e suporte.", emoji: { name: "suporte", id: "1560359877837197465" } },
+          { label: "Reembolso", value: "refund", description: "Solicitações relacionadas a reembolso.", emoji: { name: "reembolso", id: "1560359834849648740" } },
+          { label: "Vagas", value: "vacancies", description: "Dúvidas e solicitações sobre vagas.", emoji: { name: "vagas", id: "1560359804348796988" } },
+          { label: "Receber Evento", value: "event", description: "Atendimento para recebimento de eventos.", emoji: { name: "receber_evento", id: "1560359770840375346" } }
         ])
     )
   ];
@@ -2644,11 +2687,23 @@ client.on("interactionCreate", async interaction => {
           return safeShowModal(interaction, modal);
         }
 
-        const slots = Array.from({ length: 4 }, () => ({ format: null, modality: null, channelId: null }));
+        const previousDestinations = Array.isArray(db.config.queueDestinations) ? db.config.queueDestinations : [];
+        const slots = Array.from({ length: 4 }, (_, index) => ({
+          format: previousDestinations[index]?.format || null,
+          modality: previousDestinations[index]?.modality || null,
+          channelId: previousDestinations[index]?.channelId || null,
+          confirmed: false
+        }));
         filaSetup.set(interaction.user.id, { slots, guildId: interaction.guildId });
         const setupPanels = slots.map((slot, index) => ({
-          content: `🎯 **Configuração da fila — destino ${index + 1}/4**\n\nEscolha o formato, a modalidade e o canal deste destino. Cada cartão pode ter uma configuração diferente.`,
-          components: queueSetupSlotComponents(index),
+          content: [
+            `🎯 **Configuração da fila — destino ${index + 1}/4**`,
+            "",
+            slot.format && slot.modality && slot.channelId
+              ? `Salvo: **${slot.format} · ${modalityName(slot.modality)} · <#${slot.channelId}>**. Altere o que quiser e clique em **Salvar este destino**.`
+              : "Escolha formato, modalidade e canal para este destino e clique em **Salvar este destino**. Cada cartão pode ser diferente."
+          ].join("\n"),
+          components: queueSetupSlotComponents(index, slot),
           flags: MessageFlags.Ephemeral
         }));
         await interaction.reply(setupPanels[0]);
@@ -2666,6 +2721,28 @@ client.on("interactionCreate", async interaction => {
     ---------------------------------------------------- */
 
     if (interaction.isButton()) {
+      const filaSaveMatch = interaction.customId.match(/^fila_slot_save_([1-4])$/);
+      if (filaSaveMatch) {
+        if (!(await requireAdmin(interaction))) return;
+        const setup = filaSetup.get(interaction.user.id);
+        if (!setup || setup.guildId !== interaction.guildId) return deny(interaction, "❌ Esta configuração expirou. Inicie `/fila` novamente.");
+        const slot = setup.slots[Number(filaSaveMatch[1]) - 1];
+        if (!slot.format || !slot.modality || !slot.channelId) {
+          return deny(interaction, "❌ Complete formato, modalidade e canal deste destino antes de salvar.");
+        }
+        const hasAllValues = setup.slots.every(item => item.format && item.modality && item.channelId);
+        if (hasAllValues && new Set(setup.slots.map(item => item.channelId)).size !== 4) {
+          return deny(interaction, "❌ Os quatro destinos precisam usar canais diferentes. Altere o canal repetido e salve novamente.");
+        }
+        slot.confirmed = true;
+        await interaction.deferUpdate();
+        if (setup.slots.every(item => item.confirmed)) return tryPublishFilaSetup(interaction, setup);
+        return interaction.followUp({
+          content: `✅ Destino ${filaSaveMatch[1]} salvo. Confirmações: **${setup.slots.filter(item => item.confirmed).length}/4**.`,
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
       if (["pix_configure", "pix_edit"].includes(interaction.customId)) {
         if (!(await requireMediator(interaction))) return;
         const current = db.pix?.[interaction.user.id] || {};
@@ -3946,6 +4023,7 @@ client.on("interactionCreate", async interaction => {
         const setup = filaSetup.get(interaction.user.id);
         if (!setup || setup.guildId !== interaction.guildId) return deny(interaction, "❌ Esta configuração expirou. Inicie `/fila` novamente.");
         setup.slots[Number(queueSlotMatch[1]) - 1].channelId = interaction.values[0];
+        setup.slots[Number(queueSlotMatch[1]) - 1].confirmed = false;
         await interaction.deferUpdate();
         return tryPublishFilaSetup(interaction, setup);
       }
@@ -4526,6 +4604,7 @@ client.on("interactionCreate", async interaction => {
         const slot = setup.slots[Number(filaSlotSelection[2]) - 1];
         if (filaSlotSelection[1] === "format") slot.format = interaction.values[0];
         else slot.modality = interaction.values[0];
+        slot.confirmed = false;
         await interaction.deferUpdate();
         return tryPublishFilaSetup(interaction, setup);
       }
@@ -4786,7 +4865,10 @@ async function refreshQueueMessage(queue, guild) {
   const publications = Array.isArray(queue.publications) && queue.publications.length
     ? queue.publications
     : (queue.channelId && queue.messageId ? [{ channelId: queue.channelId, messageId: queue.messageId }] : []);
-  await runWithConcurrency(publications, 4, async publication => {
+  const uniquePublications = Array.from(new Map(publications
+    .filter(item => item?.channelId && item?.messageId)
+    .map(item => [item.messageId, item])).values());
+  await runWithConcurrency(uniquePublications, 4, async publication => {
     if (!publication.channelId || !publication.messageId) return;
     const cacheKey = `${guild.id}:${publication.messageId}`;
     if (queueRenderCache.get(cacheKey) === signature) return;
