@@ -19,6 +19,7 @@ COMANDOS:
   /embeds
   /criar ticket
   /fila streamer
+  /atualizar fila
   .ssmob
   .ssemu
   .med
