@@ -123,7 +123,7 @@ const ALLOWED_VALUES = [
 ];
 
 const FORMATS = ["1x1", "2x2", "3x3", "4x4"];
-const MODALITIES = ["mobile", "emulador", "misto"];
+const MODALITIES = ["mobile", "mobilador", "emulador", "misto"];
 
 function createDefaultDatabase() {
   return {
@@ -368,6 +368,7 @@ function validUrl(value) {
 function modalityName(modality) {
   const names = {
     mobile: "Mobile",
+    mobilador: "Mobilador",
     emulador: "Emulador",
     misto: "Misto"
   };
@@ -536,6 +537,23 @@ async function getChannel(guild, channelId) {
 
 function queueId(format, modality, value, mode) {
   return `${format}:${modality}:${valueId(value)}:${mode}`;
+}
+
+const queueMutationTails = new Map();
+
+async function withQueueMutationLock(queueId, task) {
+  const previous = queueMutationTails.get(queueId) || Promise.resolve();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const tail = previous.catch(() => {}).then(() => gate);
+  queueMutationTails.set(queueId, tail);
+  await previous.catch(() => {});
+  try {
+    return await task();
+  } finally {
+    release();
+    if (queueMutationTails.get(queueId) === tail) queueMutationTails.delete(queueId);
+  }
 }
 
 function getQueue(format, modality, value, mode) {
@@ -999,7 +1017,7 @@ function paymentMessage(bet) {
     `💰 **Valor a pagar:** ${money(amountToPay)}`,
     `👤 **Nome:** ${pix.name}`,
     `🔑 **Chave PIX:** ${pix.key}`,
-    "Faça o pagamento e aguarde a confirmação do Mediador."
+    "Quando concluir o pagamento, envie o comprovante nesta conversa para o Mediador."
   ].join("\n"));
   const qr = createPixQrUrl(pix.name, pix.key, db.config.embedColor);
   if (qr) embed.setImage(qr);
@@ -1009,7 +1027,8 @@ function paymentMessage(bet) {
 
 async function createPrivateBetChannel(guild, bet) {
   const parent = db.config.betChannelId
-    ? await guild.channels.fetch(db.config.betChannelId).catch(() => null)
+    ? (guild.channels.cache.get(db.config.betChannelId)
+      || await guild.channels.fetch(db.config.betChannelId).catch(() => null))
     : null;
 
   if (!parent || parent.type !== ChannelType.GuildText) {
@@ -1079,6 +1098,7 @@ async function createBetFromQueue(interaction, queue) {
   const players = queue.players.splice(0, needed);
   const matchMode = queue.mode;
   const playerModes = players.map(id => queue.playerModes?.[id] || null);
+  queue.playerModes = queue.playerModes || {};
 
   const id =
     `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -1109,28 +1129,53 @@ async function createBetFromQueue(interaction, queue) {
   if (queue.players.length === 0) queue.mode = queue.format === "1x1" ? "choice" : null;
 
   db.bets[id] = bet;
+  saveDatabase();
+  // Atualiza a publicação sem deixar a chamada da fila esperar a resposta do Discord.
+  void refreshQueueMessage(queue, interaction.guild).catch(error => {
+    console.warn("Não foi possível atualizar a fila após formar uma aposta:", error?.message || error);
+  });
 
   const hasMediator = await distributeMediator(bet, interaction.guild);
 
   if (!hasMediator) {
     queue.players.unshift(...players);
+    players.forEach((playerId, index) => {
+      if (playerModes[index]) queue.playerModes[playerId] = playerModes[index];
+    });
     delete db.bets[id];
+    saveDatabase();
+    void refreshQueueMessage(queue, interaction.guild).catch(() => {});
     return null;
   }
 
-  const channel = await createPrivateBetChannel(interaction.guild, bet);
-
-  bet.channelId = channel.id;
-
-  await channel.send({
-    content: players.map(id => `<@${id}>`).join(" "),
-    embeds: [betEmbed(bet)],
-    components: betButtons(id)
-  });
-
-  saveDatabase();
-
-  return bet;
+  let privateChannel = null;
+  try {
+    const channel = await createPrivateBetChannel(interaction.guild, bet);
+    privateChannel = channel;
+    bet.channelId = channel.id;
+    await channel.send({
+      content: players.map(playerId => `<@${playerId}>`).join(" "),
+      allowedMentions: { users: players },
+      embeds: [betEmbed(bet)],
+      components: betButtons(id)
+    });
+    saveDatabase();
+    return bet;
+  } catch (error) {
+    if (privateChannel) {
+      await privateChannel.setLocked?.(true, "Não foi possível inicializar a aposta").catch(() => {});
+      await privateChannel.setArchived?.(true, "Não foi possível inicializar a aposta").catch(() => {});
+    }
+    queue.players.unshift(...players);
+    players.forEach((playerId, index) => {
+      if (playerModes[index]) queue.playerModes[playerId] = playerModes[index];
+    });
+    if (queue.players.length > 0 && matchMode) queue.mode = matchMode;
+    delete db.bets[id];
+    saveDatabase();
+    void refreshQueueMessage(queue, interaction.guild).catch(() => {});
+    throw error;
+  }
 }
 
 /* ========================================================
@@ -1343,10 +1388,10 @@ async function finishStreamerMatch(message, match) {
 ======================================================== */
 
 const TICKET_TYPES = {
-  support: { label: "Suporte", emoji: "", channelKey: "ticketSupportChannelId" },
-  refund: { label: "Reembolso", emoji: "", channelKey: "ticketRefundChannelId" },
-  vacancies: { label: "Vagas", emoji: "", channelKey: "ticketVacanciesChannelId" },
-  event: { label: "Receber Evento", emoji: "", channelKey: "ticketEventChannelId" }
+  support: { label: "Suporte", emoji: "<:suporte:1560359877837197465>", channelKey: "ticketSupportChannelId" },
+  refund: { label: "Reembolso", emoji: "<:reembolso:1560359834849648740>", channelKey: "ticketRefundChannelId" },
+  vacancies: { label: "Vagas", emoji: "<:vagas:1560359804348796988>", channelKey: "ticketVacanciesChannelId" },
+  event: { label: "Receber Evento", emoji: "<:receber_evento:1560359770840375346>", channelKey: "ticketEventChannelId" }
 };
 
 function ticketCreationPanelComponents() {
@@ -1416,7 +1461,7 @@ function ticketPanelComponents(ticketId, claimedBy = null) {
 
 function ticketPanelEmbed(ticket, guild) {
   const type = TICKET_TYPES[ticket.type] || TICKET_TYPES.support;
-  return makeEmbed(`TICKET DE ${type.label.toUpperCase()}`, [
+  return makeEmbed(`${type.emoji} TICKET DE ${type.label.toUpperCase()}`, [
     "**Central de atendimento deste ticket.**",
     "",
     `**Criado por:** <@${ticket.creatorId}>`,
@@ -1465,48 +1510,57 @@ async function createTicketTranscript(ticket, ticketChannel) {
   messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
   const ticketType = TICKET_TYPES[ticket.type] || TICKET_TYPES.support;
-  const transcript = [
-    `TRANSCRIÇÃO DO TICKET: ${ticketChannel.name}`,
-    `Tipo: ${ticketType.label}`,
-    `Pessoa que abriu: ${ticket.creatorId ? `<@${ticket.creatorId}> (${ticket.creatorId})` : "desconhecido"}`,
-    `Responsável: ${ticket.claimedBy ? `<@${ticket.claimedBy}> (${ticket.claimedBy})` : "não assumido"}`,
-    `Encerrado por: ${ticket.closedBy ? `<@${ticket.closedBy}> (${ticket.closedBy})` : "desconhecido"}`,
-    `Criado em: ${ticket.createdAt ? new Date(ticket.createdAt).toISOString() : "desconhecido"}`,
-    `Encerrado em: ${ticket.closedAt ? new Date(ticket.closedAt).toISOString() : new Date().toISOString()}`,
-    "",
-    "===== CONVERSA =====",
-    ""
-  ];
-
-  for (const message of messages) {
-    const author = message.member?.displayName
-      || message.author?.globalName
-      || message.author?.username
-      || "Usuário desconhecido";
-    const username = message.author?.username ? ` (@${message.author.username})` : "";
-    const parts = [message.content?.trim()].filter(Boolean);
-
+  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+  const formatDate = timestamp => timestamp
+    ? new Date(timestamp).toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" })
+    : "Não informado";
+  const opener = await client.users.fetch(ticket.creatorId).catch(() => null);
+  const owner = ticket.claimedBy ? await client.users.fetch(ticket.claimedBy).catch(() => null) : null;
+  const closer = ticket.closedBy ? await client.users.fetch(ticket.closedBy).catch(() => null) : null;
+  const displayUser = user => user?.globalName || user?.username || "Não informado";
+  const messageHtml = messages.map((message, index) => {
+    const author = message.member?.displayName || message.author?.globalName || message.author?.username || "Usuário desconhecido";
+    const previous = messages[index - 1];
+    const sameAuthor = previous?.author?.id === message.author?.id;
+    const sameDay = previous && new Date(previous.createdTimestamp).toDateString() === new Date(message.createdTimestamp).toDateString();
+    const dateDivider = !sameDay
+      ? `<div class="date-divider"><span>${escapeHtml(new Date(message.createdTimestamp).toLocaleDateString("pt-BR", { dateStyle: "full" }))}</span></div>`
+      : "";
+    const time = new Date(message.createdTimestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const initial = escapeHtml([...author.trim()][0]?.toLocaleUpperCase("pt-BR") || "?");
+    const avatarUrl = message.author?.displayAvatarURL?.({ size: 64 });
+    const avatar = avatarUrl
+      ? `<img class="avatar" src="${escapeHtml(avatarUrl)}" alt="">`
+      : `<div class="avatar">${initial}</div>`;
+    let content = message.content?.trim() || "";
+    for (const user of message.mentions?.users?.values?.() || []) {
+      content = content.replace(new RegExp(`<@!?${user.id}>`, "g"), `@${user.globalName || user.username}`);
+    }
+    const blocks = [];
+    if (content) blocks.push(`<div class="message-text">${escapeHtml(content)}</div>`);
     for (const embed of message.embeds || []) {
-      const embedLines = [embed.title, embed.description, embed.url].filter(Boolean);
-      if (embedLines.length) parts.push(`[EMBED]\n${embedLines.join("\n")}`);
+      const title = embed.title ? `<div class="card-title">${escapeHtml(embed.title)}</div>` : "";
+      const description = embed.description ? `<div>${escapeHtml(embed.description)}</div>` : "";
+      const link = embed.url ? `<a href="${escapeHtml(embed.url)}" target="_blank" rel="noreferrer">Abrir link</a>` : "";
+      if (title || description || link) blocks.push(`<div class="discord-card">${title}${description}${link}</div>`);
     }
-
     for (const attachment of message.attachments?.values?.() || []) {
-      parts.push(`[ANEXO] ${attachment.name || "arquivo"}: ${attachment.url}`);
+      blocks.push(`<a class="attachment" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer"><span class="attachment-icon">↗</span><span><strong>${escapeHtml(attachment.name || "Arquivo anexado")}</strong><small>Toque para abrir ou baixar</small></span></a>`);
     }
-
     for (const sticker of message.stickers?.values?.() || []) {
-      parts.push(`[FIGURINHA] ${sticker.name}`);
+      blocks.push(`<div class="sticker">Figurinha: ${escapeHtml(sticker.name)}</div>`);
     }
+    if (!blocks.length) blocks.push(`<div class="message-text muted">Mensagem sem texto</div>`);
+    return `${dateDivider}<article class="message ${sameAuthor && sameDay ? "compact" : ""}">${sameAuthor && sameDay ? `<div class="avatar-spacer"></div>` : avatar}<div class="message-body">${sameAuthor && sameDay ? "" : `<div class="author">${escapeHtml(author)} <time>${escapeHtml(time)}</time></div>`}${blocks.join("")}</div></article>`;
+  }).join("\n");
 
-    transcript.push(
-      `[${new Date(message.createdTimestamp).toISOString()}] ${author}${username} (ID ${message.author?.id || "?"})`,
-      parts.join("\n") || "[mensagem sem texto]",
-      ""
-    );
-  }
-
-  return transcript.join("\n");
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Transcript - ${escapeHtml(ticketChannel.name)}</title>
+<style>
+:root{color-scheme:dark;--bg:#313338;--panel:#2b2d31;--text:#dbdee1;--muted:#949ba4;--accent:#5865f2;--line:#3f4147}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{max-width:980px;margin:28px auto;padding:0 18px}.header{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-bottom:20px}.eyebrow{color:#b5bac1;text-transform:uppercase;letter-spacing:.09em;font-size:11px;font-weight:700}.header h1{margin:5px 0 16px;color:#fff;font-size:25px}.meta{display:flex;flex-wrap:wrap;gap:9px}.meta div{background:#232428;border-radius:9px;padding:9px 12px;min-width:150px}.meta small{display:block;color:var(--muted);font-size:11px}.meta strong{font-size:13px}.chat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 10px}.date-divider{display:flex;align-items:center;gap:12px;margin:18px 14px;color:var(--muted);font-size:12px;font-weight:700}.date-divider:before,.date-divider:after{content:"";height:1px;background:var(--line);flex:1}.message{display:flex;gap:14px;padding:9px 14px}.message:hover{background:#32343a}.message.compact{padding-top:2px;padding-bottom:3px}.avatar{width:40px;height:40px;flex:0 0 40px;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:var(--accent);color:white;font-weight:700}.avatar-spacer{width:40px;flex:0 0 40px}.message-body{min-width:0;flex:1}.author{font-weight:650;color:#fff;margin-bottom:3px}.author time{font-size:11px;font-weight:400;color:var(--muted);margin-left:7px}.message-text{white-space:pre-wrap;overflow-wrap:anywhere}.muted{color:var(--muted);font-style:italic}.discord-card{border-left:4px solid var(--accent);background:#232428;border-radius:4px 8px 8px 4px;padding:12px 14px;margin:8px 0;max-width:620px;white-space:pre-wrap;overflow-wrap:anywhere}.card-title{font-weight:700;color:#fff;margin-bottom:5px}.discord-card a{display:inline-block;margin-top:8px;color:#00a8fc}.attachment{display:flex;align-items:center;gap:12px;width:min(440px,100%);padding:12px;background:#232428;border:1px solid var(--line);border-radius:9px;margin:7px 0;color:var(--text);text-decoration:none}.attachment:hover{border-color:#777}.attachment-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:var(--accent);color:white;font-size:20px}.attachment small{display:block;color:var(--muted)}.sticker{display:inline-block;background:#232428;border-radius:8px;padding:9px 12px;color:#b5bac1}.footer{text-align:center;color:var(--muted);font-size:11px;padding:16px}
+</style></head><body><main class="wrap"><header class="header"><div class="eyebrow">Histórico de atendimento</div><h1>${escapeHtml(ticketChannel.name)}</h1><div class="meta"><div><small>Tipo de atendimento</small><strong>${escapeHtml(ticketType.label)}</strong></div><div><small>Aberto por</small><strong>${escapeHtml(displayUser(opener))}</strong></div><div><small>Responsável</small><strong>${escapeHtml(displayUser(owner))}</strong></div><div><small>Encerrado por</small><strong>${escapeHtml(displayUser(closer))}</strong></div><div><small>Aberto em</small><strong>${escapeHtml(formatDate(ticket.createdAt))}</strong></div><div><small>Encerrado em</small><strong>${escapeHtml(formatDate(ticket.closedAt || Date.now()))}</strong></div></div></header><section class="chat">${messageHtml || `<div class="date-divider"><span>Nenhuma mensagem encontrada</span></div>`}</section><div class="footer">Transcript gerado pelo sistema de atendimento</div></main></body></html>`;
 }
 
 async function sendTicketTranscript(ticket, ticketChannel) {
@@ -1516,30 +1570,46 @@ async function sendTicketTranscript(ticket, ticketChannel) {
   const recipient = await client.users.fetch(openerId);
   const maxChunkBytes = 7 * 1024 * 1024;
   const chunks = [];
-  let current = "";
-
-  for (const line of transcript.split(/(?<=\n)/)) {
-    if (current && Buffer.byteLength(current + line, "utf8") > maxChunkBytes) {
-      chunks.push(current);
-      current = "";
+  if (Buffer.byteLength(transcript, "utf8") <= maxChunkBytes) {
+    chunks.push(transcript);
+  } else {
+    // Mantém o arquivo HTML válido mesmo em tickets muito grandes, criando uma página por faixa de mensagens.
+    const plainLines = transcript.match(/<article class="message[\s\S]*?<\/article>/g) || [];
+    const header = transcript.slice(0, transcript.indexOf('<section class="chat">') + '<section class="chat">'.length);
+    const footer = `</section>${transcript.slice(transcript.indexOf("<div class=\"footer\">"))}`;
+    let page = header;
+    for (const block of plainLines) {
+      if (Buffer.byteLength(page + block + footer, "utf8") > maxChunkBytes && page !== header) {
+        chunks.push(page + footer);
+        page = header;
+      }
+      page += block;
     }
-    current += line;
+    chunks.push(page + footer);
   }
-  if (current || !chunks.length) chunks.push(current);
 
   const fileParts = chunks.map((content, index) => new AttachmentBuilder(
     Buffer.from(content, "utf8"),
-    { name: `transcript-${ticket.id}${chunks.length > 1 ? `-${index + 1}` : ""}.txt` }
+    { name: `transcript-${ticket.id}${chunks.length > 1 ? `-${index + 1}` : ""}.html` }
   ));
 
   for (let index = 0; index < fileParts.length; index += 3) {
     const batch = fileParts.slice(index, index + 3);
     const firstPart = index + 1;
     const lastPart = index + batch.length;
-    await recipient.send({
-      content: `Segue o transcript do seu ticket **${ticketChannel.name}**${fileParts.length > 1 ? ` (parte${batch.length > 1 ? "s" : ""} ${firstPart}–${lastPart} de ${fileParts.length})` : ""}.`,
-      files: batch
-    });
+    const partInfo = fileParts.length > 1 ? `\nParte${batch.length > 1 ? "s" : ""} ${firstPart}–${lastPart} de ${fileParts.length}` : "";
+    const transcriptEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle("Transcript do seu atendimento")
+      .setDescription(`O atendimento **${ticketChannel.name}** foi encerrado. O histórico completo está no arquivo HTML anexado; abra-o para visualizar a conversa em um layout inspirado no Discord.${partInfo}`)
+      .addFields(
+        { name: "Assunto", value: (TICKET_TYPES[ticket.type] || TICKET_TYPES.support).label, inline: true },
+        { name: "Responsável", value: ticket.claimedBy ? `<@${ticket.claimedBy}>` : "Não assumido", inline: true },
+        { name: "Encerrado em", value: new Date(ticket.closedAt || Date.now()).toLocaleString("pt-BR"), inline: true }
+      )
+      .setFooter({ text: "Guarde este arquivo para consultar a conversa depois." })
+      .setTimestamp(ticket.closedAt || Date.now());
+    await recipient.send({ embeds: [transcriptEmbed], files: batch });
   }
 }
 
@@ -1565,41 +1635,36 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
     throw new Error("O bot precisa da permissão **Gerenciar Threads** no canal dos tickets.");
   }
 
+  // Reserva o ticket sem await para que dois responsáveis não consigam assumi-lo ao mesmo tempo.
+  ticket.claimedBy = userId;
+  ticket.claimedAt = Date.now();
+  saveDatabase();
+
   // Remove somente os outros responsáveis que estão nesta thread.
   // O criador e quem assumiu permanecem com acesso.
   // A cache já contém os membros da thread na maioria dos casos.
   // Só faz uma chamada à API se a cache estiver vazia, reduzindo bastante
   // o tempo de resposta do botão.
-  let threadMembers = ticketChannel.members?.cache;
-  if (!threadMembers?.size) {
-    try {
-      threadMembers = await ticketChannel.members.fetch();
-    } catch {
-      threadMembers = ticketChannel.members?.cache;
+  const cleanupPromise = (async () => {
+    let threadMembers = ticketChannel.members?.cache;
+    if (!threadMembers?.size) {
+      try {
+        threadMembers = await ticketChannel.members.fetch();
+      } catch {
+        threadMembers = ticketChannel.members?.cache;
+      }
     }
-  }
-
-  const removePromises = [];
-  for (const member of threadMembers?.values?.() || []) {
-    if (
-      member.id !== userId &&
-      member.id !== ticket.creatorId &&
-      memberIsTicketResponsible(member)
-    ) {
-      removePromises.push(
-        ticketChannel.members
-          .remove(member.id, "Ticket assumido por outro responsável")
-          .catch(error => {
-            console.error(`❌ Não foi possível remover ${member.id} da thread:`, error);
-          })
-      );
+    const removePromises = [];
+    for (const member of threadMembers?.values?.() || []) {
+      if (member.id !== userId && member.id !== ticket.creatorId && memberIsTicketResponsible(member)) {
+        removePromises.push(ticketChannel.members.remove(member.id, "Ticket assumido por outro responsável").catch(error => {
+          console.error(`Não foi possível atualizar o acesso de ${member.id} à thread:`, error?.message || error);
+        }));
+      }
     }
-  }
-  await Promise.all(removePromises);
-
-  ticket.claimedBy = userId;
-  ticket.claimedAt = Date.now();
-  saveDatabase();
+    await Promise.all(removePromises);
+  })();
+  void cleanupPromise.catch(error => console.warn("Falha ao atualizar os responsáveis do ticket:", error?.message || error));
 
   const cleanName = String(displayName || `usuario-${userId.slice(-5)}`)
     .replace(/[^a-zA-Z0-9À-ÿ _-]/g, "")
@@ -1609,19 +1674,16 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
 
   const newName = `RESOLVENDO | ${cleanName.toLocaleUpperCase("pt-BR")}`.slice(0, 100);
 
-  try {
-    await ticketChannel.setName(newName, "Ticket assumido");
-  } catch (error) {
-    console.error("❌ Não foi possível alterar o nome do ticket:", error);
-  }
-
-  if (isFirstClaim) {
-    await ticketChannel.send({
-      content: `✅ **TICKET ASSUMIDO POR <@${userId}>**`
-    }).catch(error => {
-      console.error("❌ Não foi possível enviar a confirmação de ticket assumido:", error);
-    });
-  }
+  const updateName = ticketChannel.setName(newName, "Ticket assumido").catch(error => {
+    console.error("Não foi possível alterar o nome do ticket:", error?.message || error);
+  });
+  const announceClaim = isFirstClaim
+    ? ticketChannel.send({
+        content: `RESOLVENDO | <@${userId}>`,
+        allowedMentions: { users: [userId] }
+      }).catch(error => console.error("Não foi possível anunciar o responsável pelo ticket:", error?.message || error))
+    : Promise.resolve();
+  await Promise.all([updateName, announceClaim]);
 
   return newName;
 }
@@ -1707,26 +1769,47 @@ async function createTicketChannel(interaction, ticketType = "support") {
   db.tickets[ticketId] = ticket;
   saveDatabase();
 
-  await thread.send({
+  const welcomeMessage = await thread.send({
     content: [
       `<@${interaction.user.id}>`,
       responsibleRoleMentions.join(" ")
     ].filter(Boolean).join(" "),
-    embeds: [makeEmbed(`TICKET DE ${type.label.toUpperCase()}`, [
-      "**Atendimento privado criado.**",
+    embeds: [makeEmbed(`${type.emoji} TICKET DE ${type.label.toUpperCase()}`, [
+      "Seu atendimento privado está pronto. Conte para a equipe como podemos ajudar.",
       "",
-      `**Tipo:** ${type.label}`,
-      "Os cargos responsáveis foram marcados acima.",
-      "Explique sua solicitação neste ticket.",
-      "Não envie mensagens privadas para a equipe.",
+      `**Assunto:** ${type.label}`,
+      "A equipe responsável foi avisada e responderá por aqui.",
       "",
-      "Um responsável pode assumir o ticket pelo painel abaixo.",
-      "`.aux` abre o painel de gerenciamento."
+      "Se precisar acrescentar alguma informação, pode enviar nesta conversa."
     ].join("\n"))],
     components: ticketPanelComponents(ticket.id)
   });
+  ticket.panelMessageId = welcomeMessage.id;
+  saveDatabase();
 
   return { ticket, channel: thread };
+}
+
+async function preserveClosedTicketPanel(ticket, ticketChannel) {
+  let panelMessage = ticket.panelMessageId
+    ? await ticketChannel.messages.fetch(ticket.panelMessageId).catch(() => null)
+    : null;
+  if (!panelMessage) {
+    const recent = await ticketChannel.messages.fetch({ limit: 50 }).catch(() => null);
+    panelMessage = recent?.find(message =>
+      message.author?.id === client.user?.id &&
+      (message.components || []).some(row => (row.components || []).some(component =>
+        (component.customId || component.custom_id || "").startsWith(`aux_panel|${ticket.id}`)
+      ))
+    ) || null;
+    if (panelMessage) {
+      ticket.panelMessageId = panelMessage.id;
+      saveDatabase();
+    }
+  }
+  if (panelMessage) await panelMessage.edit({ components: [] }).catch(error => {
+    console.error("Não foi possível preservar o embed inicial do ticket:", error?.message || error);
+  });
 }
 
 function findTicketByChannel(guildId, channelId) {
@@ -1906,7 +1989,7 @@ function isQueuePublicationMessage(message, botUserId) {
   const description = String(message.embeds?.[0]?.description || "");
   const hasQueueFields = /valorfila|Valor da aposta/i.test(description)
     && /quantidade|Jogadores/i.test(description);
-  return /^(?:🎮\s*)?\d+[vx]\d+\s+(?:Mobile|Emulador|Misto)(?:\s*\|\s*R\$\s*[\d,.]+)?$/i.test(title)
+  return /^(?:🎮\s*)?\d+[vx]\d+\s+(?:Mobile|Mobilador|Emulador|Misto)(?:\s*\|\s*R\$\s*[\d,.]+)?$/i.test(title)
     || /^(?:🎮\s*)?FILA\s+\d+[vx]\d+$/i.test(title)
     || /^🎥\s*FILA DO\b/i.test(title)
     || /^FILA MEDIADORES$/i.test(title)
@@ -2301,7 +2384,7 @@ client.on("messageCreate", async message => {
           "",
           `📌 **Canal de pagamento:** \`pagar-${paymentLabel}\``,
           "",
-          `📢 ${adminMention} — a sala foi confirmada e os dados foram identificados.`
+          `📢 ${adminMention} — sala confirmada e dados identificados.`
         ].join("\n"));
 
         await message.channel.send({
@@ -2657,7 +2740,7 @@ client.on("interactionCreate", async interaction => {
           const description = embed?.description || "";
           let parsed = rawId ? parseQueueKey(rawId) : null;
           if (!parsed && !queue) {
-            const titleMatch = title.match(/^(?:🎮\s*)?(\d+[vx]\d+)\s+(Mobile|Emulador|Misto)(?:\s*\|\s*R\$\s*([\d,.]+))?$/i);
+            const titleMatch = title.match(/^(?:🎮\s*)?(\d+[vx]\d+)\s+(Mobile|Mobilador|Emulador|Misto)(?:\s*\|\s*R\$\s*([\d,.]+))?$/i);
             if (titleMatch) {
               const format = titleMatch[1].toLowerCase().replace("v", "x");
               const modality = titleMatch[2].toLowerCase();
@@ -3497,6 +3580,8 @@ client.on("interactionCreate", async interaction => {
           return deny(interaction, "❌ Esta fila não existe mais.");
         }
 
+        return withQueueMutationLock(queue.id, async () => {
+
         if (queue.players.includes(interaction.user.id)) {
           return deny(interaction, "❌ Você já está nessa fila.");
         }
@@ -3556,26 +3641,35 @@ client.on("interactionCreate", async interaction => {
           const removedPlayer = queue.players.pop();
           if (queue.playerModes) delete queue.playerModes[removedPlayer];
           saveDatabase();
-          await refreshQueueMessage(queue, interaction.guild);
+          void refreshQueueMessage(queue, interaction.guild).catch(() => {});
           return interaction.followUp({
             content: "❌ Não há Mediador disponível no momento. A aposta não pode ser puxada.",
             flags: MessageFlags.Ephemeral
           }).catch(() => {});
         }
 
-        const bet =
-          queue.players.length >= requiredPlayers(queue.format)
-            ? await createBetFromQueue(interaction, queue)
-            : null;
+        if (queue.players.length >= requiredPlayers(queue.format)) {
+          // A remoção da fila e o salvamento acontecem antes das chamadas de rede da sala privada.
+          const betOpening = createBetFromQueue(interaction, queue);
+          saveDatabase();
+          try {
+            await betOpening;
+          } catch (error) {
+            console.error("Não foi possível abrir o tópico privado da aposta:", error?.message || error);
+            await interaction.followUp({
+              content: "Não consegui abrir a sala privada desta aposta. Os dois jogadores voltaram para a fila.",
+              flags: MessageFlags.Ephemeral
+            }).catch(() => {});
+          }
+          return;
+        }
 
         saveDatabase();
-
-        // Atualiza a fila em qualquer cenário. Quando a aposta é formada, os jogadores
-        // já foram removidos da fila e o painel volta imediatamente ao estado correto.
-        await refreshQueueMessage(queue, interaction.guild);
+        void refreshQueueMessage(queue, interaction.guild).catch(() => {});
 
         // Nenhuma mensagem de sucesso é enviada ao jogador.
         return;
+        });
       }
 
       if (action === "queue_leave") {
@@ -3587,6 +3681,8 @@ client.on("interactionCreate", async interaction => {
           return deny(interaction, "❌ Esta fila não existe.");
         }
 
+        return withQueueMutationLock(queue.id, async () => {
+
         const oldLength = queue.players.length;
 
         queue.players = queue.players.filter(
@@ -3596,7 +3692,7 @@ client.on("interactionCreate", async interaction => {
         if (queue.players.length === 0) queue.mode = queue.format === "1x1" ? "choice" : null;
 
         saveDatabase();
-        await refreshQueueMessage(queue, interaction.guild);
+        void refreshQueueMessage(queue, interaction.guild).catch(() => {});
 
         if (queue.players.length < oldLength) {
           return;
@@ -3606,6 +3702,7 @@ client.on("interactionCreate", async interaction => {
           content: "❌ Você não estava nessa fila.",
           flags: MessageFlags.Ephemeral
         }).catch(() => {});
+        });
       }
 
       /* FILA MEDIADORES */
@@ -3794,8 +3891,19 @@ client.on("interactionCreate", async interaction => {
         }).catch(() => {});
 
         if (bet.mediatorId) {
+          const mediatorEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle("Aposta confirmada")
+            .setDescription(`Os dois jogadores confirmaram a aposta de **${money(bet.value)}**. A sala privada está pronta para o atendimento do Mediador.`)
+            .addFields(
+              { name: "Jogadores", value: bet.players.map(id => `<@${id}>`).join("\n"), inline: true },
+              { name: "Modalidade", value: modalityName(bet.modality), inline: true }
+            )
+            .setTimestamp();
           await interaction.channel.send({
-            content: `<@${bet.mediatorId}> — 🟢 **A aposta foi confirmada pelos dois jogadores.** **ASSUMA!** Acompanhe o pagamento.`
+            content: `<@${bet.mediatorId}>`,
+            allowedMentions: { users: [bet.mediatorId] },
+            embeds: [mediatorEmbed]
           }).catch(() => {});
         }
 
@@ -4044,29 +4152,35 @@ client.on("interactionCreate", async interaction => {
         ticket.closedAt = Date.now();
         saveDatabase();
 
+        const closedEmbed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle("Atendimento encerrado")
+          .setDescription("Este atendimento foi finalizado. Obrigado por falar com a nossa equipe; o histórico continua disponível neste tópico.")
+          .addFields({ name: "Encerrado por", value: `<@${interaction.user.id}>` })
+          .setTimestamp();
         await ticketChannel.send({
-          content: `🔒 **TICKET ENCERRADO POR <@${interaction.user.id}>.** Este canal será removido em instantes.`
+          embeds: [closedEmbed],
+          allowedMentions: { users: [interaction.user.id] }
         }).catch(error => {
           console.error("❌ Não foi possível enviar a confirmação de encerramento do ticket:", error);
         });
 
-        let transcriptDeliveryMessage = "✅ O transcript foi enviado por mensagem privada para quem abriu o ticket.";
+        let transcriptDeliveryMessage = "O transcript foi enviado por mensagem privada para a pessoa que abriu o ticket.";
         try {
           await sendTicketTranscript(ticket, ticketChannel);
         } catch (error) {
-          transcriptDeliveryMessage = "⚠️ Não consegui enviar o transcript por mensagem privada. A pessoa pode estar com DMs fechadas ou o bot pode não ter conseguido ler o histórico.";
+          transcriptDeliveryMessage = "Não consegui enviar o transcript por mensagem privada. A pessoa pode estar com as mensagens privadas fechadas.";
           console.error("❌ Não foi possível enviar o transcript do ticket:", error);
         }
 
-        await interaction.editReply({
-          content: transcriptDeliveryMessage,
-          embeds: [],
-          components: []
-        }).catch(() => {});
+        await preserveClosedTicketPanel(ticket, ticketChannel);
+        await ticketChannel.setLocked?.(true, "Ticket encerrado; histórico preservado").catch(() => {});
+        await ticketChannel.setArchived?.(true, "Ticket encerrado; histórico preservado").catch(() => {});
 
-        setTimeout(() => {
-          ticketChannel?.delete("Ticket finalizado pelo suporte").catch(() => {});
-        }, 3000);
+        await interaction.followUp({
+          content: transcriptDeliveryMessage,
+          flags: MessageFlags.Ephemeral
+        }).catch(() => {});
         return;
       }
 
@@ -5104,6 +5218,22 @@ client.on("interactionCreate", async interaction => {
 
 // Guarda a última versão enviada para não editar mensagens idênticas a cada ciclo.
 const queueRenderCache = new Map();
+const queueRenderTails = new Map();
+
+async function withQueueRenderLock(queueId, task) {
+  const previous = queueRenderTails.get(queueId) || Promise.resolve();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const tail = previous.catch(() => {}).then(() => gate);
+  queueRenderTails.set(queueId, tail);
+  await previous.catch(() => {});
+  try {
+    return await task();
+  } finally {
+    release();
+    if (queueRenderTails.get(queueId) === tail) queueRenderTails.delete(queueId);
+  }
+}
 
 function queueRenderSignature(queue) {
   return JSON.stringify({
@@ -5113,6 +5243,7 @@ function queueRenderSignature(queue) {
 }
 
 async function refreshQueueMessage(queue, guild) {
+  return withQueueRenderLock(queue.id, async () => {
   const payload = {
     embeds: [queueEmbed(queue)],
     components: queueComponents(queue)
@@ -5145,6 +5276,7 @@ async function refreshQueueMessage(queue, guild) {
     } catch {
       // Uma falha temporária será tentada novamente na próxima manutenção.
     }
+  });
   });
 }
 
