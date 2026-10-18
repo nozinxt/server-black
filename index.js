@@ -4160,19 +4160,6 @@ client.on("interactionCreate", async interaction => {
         ticket.closedAt = Date.now();
         saveDatabase();
 
-        const closedEmbed = new EmbedBuilder()
-          .setColor(db.config.embedColor || "#5865F2")
-          .setTitle("ATENDIMENTO ENCERRADO")
-          .setDescription("Este atendimento foi finalizado pela equipe. O transcript completo foi enviado por mensagem privada para quem abriu o ticket.")
-          .addFields({ name: "Encerrado por", value: `<@${interaction.user.id}>` })
-          .setTimestamp();
-        await ticketChannel.send({
-          embeds: [closedEmbed],
-          allowedMentions: { users: [interaction.user.id] }
-        }).catch(error => {
-          console.error("❌ Não foi possível enviar a confirmação de encerramento do ticket:", error);
-        });
-
         let transcriptDeliveryMessage = "O transcript foi enviado por mensagem privada para a pessoa que abriu o ticket.";
         try {
           await sendTicketTranscript(ticket, ticketChannel);
@@ -4181,12 +4168,13 @@ client.on("interactionCreate", async interaction => {
           console.error("❌ Não foi possível enviar o transcript do ticket:", error);
         }
 
+        const topicStatusMessage = "O tópico foi fechado e arquivado; o embed inicial foi mantido.";
         await preserveClosedTicketPanel(ticket, ticketChannel);
         await ticketChannel.setLocked?.(true, "Ticket encerrado; histórico preservado").catch(() => {});
         await ticketChannel.setArchived?.(true, "Ticket encerrado; histórico preservado").catch(() => {});
 
         await interaction.followUp({
-          content: transcriptDeliveryMessage,
+          content: `${transcriptDeliveryMessage}\n${topicStatusMessage}`,
           flags: MessageFlags.Ephemeral
         }).catch(() => {});
         return;
