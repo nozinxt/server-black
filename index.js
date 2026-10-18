@@ -1413,7 +1413,7 @@ function ticketCreationPanelComponents() {
 function ticketCreationPanelEmbed() {
   const c = db.config;
   const embed = new EmbedBuilder()
-    .setColor(c.ticketPanelColor || c.embedColor || "#5865F2")
+    .setColor(c.embedColor || c.ticketPanelColor || "#5865F2")
     .setTitle(c.ticketPanelTitle || "CENTRAL DE TICKETS")
     .setDescription((c.ticketPanelDescription || [
       "**Central oficial de atendimento.**",
@@ -1599,7 +1599,7 @@ async function sendTicketTranscript(ticket, ticketChannel) {
     const lastPart = index + batch.length;
     const partInfo = fileParts.length > 1 ? `\nParte${batch.length > 1 ? "s" : ""} ${firstPart}–${lastPart} de ${fileParts.length}` : "";
     const transcriptEmbed = new EmbedBuilder()
-      .setColor(0x5865F2)
+      .setColor(db.config.embedColor || "#5865F2")
       .setTitle("Transcript do seu atendimento")
       .setDescription(`O atendimento **${ticketChannel.name}** foi encerrado. O histórico completo está no arquivo HTML anexado; abra-o para visualizar a conversa em um layout inspirado no Discord.${partInfo}`)
       .addFields(
@@ -1679,7 +1679,12 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
   });
   const announceClaim = isFirstClaim
     ? ticketChannel.send({
-        content: `RESOLVENDO | <@${userId}>`,
+        content: [
+          `**RESOLVENDO | <@${userId}>**`,
+          "",
+          "O RESPONSÁVEL ASSUMIU ESTE ATENDIMENTO E JÁ ESTÁ ACOMPANHANDO SUA SOLICITAÇÃO.",
+          "SE PRECISAR COMPLEMENTAR ALGUMA INFORMAÇÃO, ENVIE AQUI NO TÓPICO."
+        ].join("\n"),
         allowedMentions: { users: [userId] }
       }).catch(error => console.error("Não foi possível anunciar o responsável pelo ticket:", error?.message || error))
     : Promise.resolve();
@@ -2532,14 +2537,17 @@ client.on("messageCreate", async message => {
       return message.reply({
         embeds: [
           makeEmbed(
-            `📊 ESTATÍSTICAS — ${message.author.username}`,
+            `PERFIL | ${message.author.username.toLocaleUpperCase("pt-BR")}`,
             [
-              "**DESEMPENHO**",
+              "**RESUMO DO SEU DESEMPENHO**",
+              "Confira seus resultados registrados nas filas.",
               "",
-              `🏆 **Vitórias:** ${stats.wins}`,
-              `💔 **Derrotas:** ${stats.losses}`,
-              `🚫 **Vitórias por W.O.:** ${stats.woWins}`,
-              `🪙 **Coins:** ${stats.coins}`
+              "━━━━━━━━━━━━━━━━━━",
+              `**Vitórias**　\`${stats.wins}\``,
+              `**Derrotas**　\`${stats.losses}\``,
+              `**Vitórias por W.O.**　\`${stats.woWins}\``,
+              `**Coins**　\`${stats.coins}\``,
+              "━━━━━━━━━━━━━━━━━━"
             ].join("\n")
           )
         ]
@@ -3844,7 +3852,7 @@ client.on("interactionCreate", async interaction => {
         const confirmationEmbed = makeEmbed(
           "✅ APOSTA CONFIRMADA",
           `👤 <@${interaction.user.id}> confirmou.\n🟢 A confirmação foi registrada.`
-        ).setColor("#57F287");
+        ).setColor(db.config.embedColor || "#5865F2");
 
         await interaction.channel.send({ embeds: [confirmationEmbed] }).catch(() => {});
 
@@ -3892,7 +3900,7 @@ client.on("interactionCreate", async interaction => {
 
         if (bet.mediatorId) {
           const mediatorEmbed = new EmbedBuilder()
-            .setColor(0x57F287)
+            .setColor(db.config.embedColor || "#5865F2")
             .setTitle("Aposta confirmada")
             .setDescription(`Os dois jogadores confirmaram a aposta de **${money(bet.value)}**. A sala privada está pronta para o atendimento do Mediador.`)
             .addFields(
@@ -4153,9 +4161,9 @@ client.on("interactionCreate", async interaction => {
         saveDatabase();
 
         const closedEmbed = new EmbedBuilder()
-          .setColor(0x5865F2)
-          .setTitle("Atendimento encerrado")
-          .setDescription("Este atendimento foi finalizado. Obrigado por falar com a nossa equipe; o histórico continua disponível neste tópico.")
+          .setColor(db.config.embedColor || "#5865F2")
+          .setTitle("ATENDIMENTO ENCERRADO")
+          .setDescription("Este atendimento foi finalizado pela equipe. O transcript completo foi enviado por mensagem privada para quem abriu o ticket.")
           .addFields({ name: "Encerrado por", value: `<@${interaction.user.id}>` })
           .setTimestamp();
         await ticketChannel.send({
