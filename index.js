@@ -1679,12 +1679,11 @@ async function claimTicket(ticket, ticketChannel, userId, displayName) {
   });
   const announceClaim = isFirstClaim
     ? ticketChannel.send({
-        content: [
-          `**RESOLVENDO | <@${userId}>**`,
-          "",
-          "O RESPONSÁVEL ASSUMIU ESTE ATENDIMENTO E JÁ ESTÁ ACOMPANHANDO SUA SOLICITAÇÃO.",
-          "SE PRECISAR COMPLEMENTAR ALGUMA INFORMAÇÃO, ENVIE AQUI NO TÓPICO."
-        ].join("\n"),
+        embeds: [new EmbedBuilder()
+          .setColor(db.config.embedColor || "#5865F2")
+          .setTitle(`${TICKET_TYPES.support.emoji} TICKET ASSUMIDO`)
+          .setDescription(`**ESTE TICKET FOI ASSUMIDO POR <@${userId}>.**`)
+          .setTimestamp()],
         allowedMentions: { users: [userId] }
       }).catch(error => console.error("Não foi possível anunciar o responsável pelo ticket:", error?.message || error))
     : Promise.resolve();
@@ -4153,31 +4152,50 @@ client.on("interactionCreate", async interaction => {
       }
 
       if (action === "finish") {
-        await interaction.deferUpdate();
-
-        ticket.status = "closed";
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const ticketType = TICKET_TYPES[ticket.type] || TICKET_TYPES.support;
         ticket.closedBy = interaction.user.id;
-        ticket.closedAt = Date.now();
-        saveDatabase();
+        ticket.closedAt = ticket.closedAt || Date.now();
 
-        let transcriptDeliveryMessage = "O transcript foi enviado por mensagem privada para a pessoa que abriu o ticket.";
-        try {
-          await sendTicketTranscript(ticket, ticketChannel);
-        } catch (error) {
-          transcriptDeliveryMessage = "Não consegui enviar o transcript por mensagem privada. A pessoa pode estar com as mensagens privadas fechadas.";
-          console.error("❌ Não foi possível enviar o transcript do ticket:", error);
+        if (!ticket.transcriptSentAt) {
+          try {
+            await sendTicketTranscript(ticket, ticketChannel);
+            ticket.transcriptSentAt = Date.now();
+            saveDatabase();
+          } catch (error) {
+            console.error("❌ Não foi possível enviar o transcript do ticket:", error?.message || error);
+            return interaction.editReply({
+              embeds: [makeEmbed(
+                "TRANSCRIPT NÃO ENVIADO",
+                "Não consegui enviar o transcript por mensagem privada. O tópico continua disponível; libere suas mensagens privadas e tente encerrar novamente."
+              )],
+              components: []
+            }).catch(() => {});
+          }
         }
 
-        const topicStatusMessage = "O tópico foi fechado e arquivado; o embed inicial foi mantido.";
-        await preserveClosedTicketPanel(ticket, ticketChannel);
-        await ticketChannel.setLocked?.(true, "Ticket encerrado; histórico preservado").catch(() => {});
-        await ticketChannel.setArchived?.(true, "Ticket encerrado; histórico preservado").catch(() => {});
+        try {
+          await ticketChannel.delete("Atendimento encerrado; tópico e mensagens removidos");
+        } catch (error) {
+          console.error("❌ Não foi possível excluir o tópico do ticket:", error?.message || error);
+          return interaction.editReply({
+            embeds: [makeEmbed(
+              "TRANSCRIPT ENVIADO; TÓPICO AINDA ABERTO",
+              "O transcript foi entregue por mensagem privada, mas o Discord não permitiu excluir o tópico. Confira se o bot tem a permissão **Gerenciar Threads** e tente encerrar novamente. O transcript não será enviado outra vez."
+            )],
+            components: []
+          }).catch(() => {});
+        }
 
-        await interaction.followUp({
-          content: `${transcriptDeliveryMessage}\n${topicStatusMessage}`,
-          flags: MessageFlags.Ephemeral
-        }).catch(() => {});
-        return;
+        delete db.tickets[ticket.id];
+        saveDatabase();
+        return interaction.editReply({
+          embeds: [makeEmbed(
+            `${ticketType.emoji} TICKET ENCERRADO`,
+            "O transcript foi enviado por mensagem privada. O tópico e as mensagens do ticket foram excluídos."
+          ).setTimestamp()],
+          components: []
+        });
       }
 
       if (action === "rename") {
@@ -4266,10 +4284,7 @@ client.on("interactionCreate", async interaction => {
         ticket.addedMembers = [...new Set([...(ticket.addedMembers || []), member.id])];
         saveDatabase();
 
-        return interaction.editReply({
-          content: `Membro ${member} adicionado ao ticket.`,
-          components: []
-        });
+        return interaction.deleteReply().catch(() => {});
       } catch (error) {
         console.error("❌ Erro ao adicionar membro ao ticket:", error);
         return interaction.editReply({
@@ -4587,7 +4602,7 @@ client.on("interactionCreate", async interaction => {
             return interaction.editReply({ content: "Não consegui renomear: preciso da permissão Gerenciar Canais." });
           }
           await ticketChannel.setName(name, "Nome alterado pelo painel de tickets");
-          return interaction.editReply({ content: `Nome do ticket alterado para **${name}**.` });
+          return interaction.deleteReply().catch(() => {});
         } catch (error) {
           console.error("Erro ao renomear ticket:", error);
           return interaction.editReply({ content: `Não foi possível renomear o ticket. Confira as permissões do bot e tente novamente. Detalhe: ${error?.message || "erro desconhecido"}` }).catch(() => {});
